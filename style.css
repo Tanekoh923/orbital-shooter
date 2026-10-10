@@ -1,0 +1,191 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;800;900&family=Space+Mono:wght@400;700&display=swap');
+:root{color-scheme:dark;--cyan:#80f9e4;--muted:#748b99;--line:#263944}*{box-sizing:border-box}body{margin:0;background:#091217;color:#e3edf0;font-family:'Noto Sans JP',sans-serif}main{max-width:1320px;margin:auto;padding:0 48px}header{height:87px;display:flex;align-items:center;border-bottom:1px solid var(--line);gap:30px}.brand{font:bold 21px 'Space Mono',monospace;letter-spacing:2px;color:inherit;text-decoration:none}.brand span{color:var(--cyan)}.edition{margin-left:auto;font:10px 'Space Mono',monospace;letter-spacing:2px;color:var(--muted)}.edition b{color:var(--cyan);margin-left:14px}button{font:11px 'Space Mono',monospace;cursor:pointer;color:inherit;background:transparent;border:1px solid var(--line);padding:12px 16px}button:hover{border-color:var(--cyan);color:var(--cyan)}button:focus-visible{outline:2px solid var(--cyan);outline-offset:4px}.intro{display:flex;justify-content:space-between;align-items:flex-end;padding:40px 0 30px}.eyebrow{font:10px 'Space Mono',monospace;letter-spacing:3px;color:var(--cyan);margin:0 0 15px}h1{font-size:42px;line-height:1.35;letter-spacing:3px;margin:0;font-weight:900}h1 em{font-style:normal;color:var(--cyan)}.description{font-size:12px;line-height:2;color:#9eafb7;margin:0 0 3px}.description span{display:block;font:9px 'Space Mono',monospace;letter-spacing:1px;color:var(--muted);margin-top:22px}.cabinet{border:1px solid #35505d;background:#0d1b22;box-shadow:0 24px 80px #0005}.hud{display:flex;align-items:center;gap:42px;padding:17px 25px;height:72px}.hud small{display:block;font:9px 'Space Mono',monospace;letter-spacing:2px;color:var(--muted);margin-bottom:4px}.hud strong{font:19px 'Space Mono',monospace;letter-spacing:2px}.hud .sector{margin-left:auto;margin-right:30px;text-align:right}.sector span{font:10px 'Space Mono',monospace;color:var(--cyan)}#lives{color:var(--cyan);font-size:15px}.screen{position:relative;aspect-ratio:1200/560;overflow:hidden;border-block:1px solid var(--line);background:#030c17}canvas{display:block;width:100%;height:100%;touch-action:none}.scanlines{position:absolute;inset:0;background:repeating-linear-gradient(transparent 0 3px,#0002 3px 4px);pointer-events:none}#overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#020b1438}#overlay.hidden{display:none}#overline{font:10px 'Space Mono',monospace;letter-spacing:4px;color:var(--cyan)}h2{font:700 clamp(32px,6vw,78px) 'Space Mono',monospace;letter-spacing:12px;margin:2px 0 8px;text-shadow:0 0 40px #69d4ed55}#message{color:#b9cbd4;font-size:12px;letter-spacing:2px}#start{margin:17px 0;background:var(--cyan);border:0;color:#071c20;font-family:inherit;font-weight:800;padding:15px 30px;min-width:210px;display:flex;justify-content:space-between}#overlay>small{font:8px 'Space Mono',monospace;color:#839faa;letter-spacing:2px}#pause{position:absolute;right:15px;top:15px;padding:8px 12px;background:#07151b88}#notice{position:absolute;bottom:24px;width:100%;text-align:center;color:var(--cyan);font:12px 'Space Mono',monospace;pointer-events:none}.power{display:flex;align-items:center;gap:18px;padding:16px 22px}.power-label{font:11px 'Space Mono',monospace;letter-spacing:1px;white-space:nowrap}.power-label small{display:block;font:8px 'Noto Sans JP',sans-serif;color:var(--muted);margin-top:6px}#upgrades{display:flex;gap:6px;flex:1}#upgrades span{flex:1;border:1px solid var(--line);padding:13px 4px;text-align:center;font:10px 'Space Mono',monospace;color:#8499a6}#upgrades span.owned{color:var(--cyan)}#upgrades span.selected{background:var(--cyan);border-color:var(--cyan);color:#051c21;box-shadow:0 0 20px #80f9e425}kbd{display:inline-block;font:9px 'Space Mono',monospace;border:1px solid #3b4c55;padding:4px 6px;border-radius:3px;color:#b2c2c9}.below{display:flex;justify-content:space-between;align-items:center;margin-top:20px;font:9px 'Space Mono',monospace;color:var(--muted)}.below span{margin:0 15px 0 7px;font-family:'Noto Sans JP',sans-serif}.below label{white-space:nowrap;display:flex;align-items:center;gap:7px}input{accent-color:var(--cyan)}footer{display:flex;justify-content:space-between;margin:40px 0 25px;font:8px 'Space Mono',monospace;letter-spacing:1px;color:#55707d}.touch{display:none}@media(max-width:700px){main{padding:0 16px}header{height:64px}.edition{display:none}#sound{margin-left:auto}.intro{padding:26px 0 20px}h1{font-size:28px}.description{font-size:9px;max-width:145px}.description span{font-size:7px}.hud{padding:10px 14px;gap:20px;height:58px}.hud strong{font-size:14px}.hud .sector{margin-right:0}.power{padding:10px;gap:8px}.power-label{display:none}#upgrades{gap:3px}#upgrades span{font-size:8px;padding:12px 2px}#equip{padding:8px}.below{gap:12px;line-height:2}.below span{margin:0 5px}footer{font-size:6px;gap:15px}#message{font-size:9px;letter-spacing:0}#overline{font-size:8px;margin:0}#start{padding:10px 22px;margin:8px;min-width:160px}h2{letter-spacing:6px}.touch{display:flex;justify-content:space-between;align-items:center;margin-top:15px;font-size:10px;color:var(--muted)}}
+/* Preflight: a compact equipment drawer above the flight deck. */
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.loadout{margin:0 0 14px;border:1px solid var(--line);background:#0d1b22}
+.loadout summary{list-style:none;display:flex;align-items:center;gap:24px;min-height:65px;padding:14px 22px;cursor:pointer;transition:background .18s}
+.loadout summary::-webkit-details-marker{display:none}
+.loadout summary:hover{background:#12252d}
+.loadout summary:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+.loadout-heading{display:flex;align-items:center;gap:17px;white-space:nowrap}
+.loadout-index{font:9px 'Space Mono',monospace;letter-spacing:1px;color:var(--cyan)}
+.loadout-heading strong{font-size:12px;letter-spacing:2px;font-weight:600}
+#loadout-summary{font:10px 'Space Mono',monospace;color:#b5c7cf;line-height:1.7}
+.loadout-toggle{display:flex;gap:22px;align-items:center;margin-left:auto;color:var(--muted);font-size:10px;white-space:nowrap}
+.loadout-toggle>span{display:inline-block;color:var(--cyan);font-size:21px;font-weight:400;line-height:1;transition:transform .2s}
+.loadout[open] summary{border-bottom:1px solid var(--line)}
+.loadout[open] .loadout-toggle>span{transform:rotate(45deg)}
+#loadout-fieldset{min-width:0;padding:22px 22px 0;margin:0;border:0}
+.loadout-selects{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.config-field{min-width:0;display:flex;flex-direction:column;gap:10px;font-size:11px}
+.config-field>span{display:flex;justify-content:space-between;align-items:center}
+.config-field small,.gauge-heading small{font:8px 'Space Mono',monospace;letter-spacing:1px;color:var(--muted)}
+select{width:100%;min-width:0;min-height:42px;padding:10px 30px 10px 12px;border:1px solid #38515e;border-radius:0;background:#08151c;color:#d6e8ec;font:11px 'Space Mono','Noto Sans JP',monospace;cursor:pointer;accent-color:var(--cyan)}
+select:hover{border-color:var(--cyan)}
+select:disabled{cursor:not-allowed;color:#758e9a;border-color:var(--line)}
+.craft-detail{margin:12px 0 23px;color:#9eb2bd;font-size:11px;line-height:1.9}
+.gauge-heading{display:flex;justify-content:space-between;gap:18px;align-items:baseline;margin-bottom:12px}
+.gauge-heading>label{font-size:11px;white-space:nowrap}
+.gauge-heading small{margin-left:12px}
+.gauge-heading p{margin:0;color:var(--muted);font-size:10px;line-height:1.8;text-align:right}
+.gauge-config{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.gauge-config label{position:relative;min-width:0;padding:12px 8px 8px;border:1px solid var(--line);background:#10212a}
+.gauge-config label>span{display:block;margin:0 0 10px 5px;font:10px 'Space Mono',monospace;letter-spacing:2px;color:var(--cyan)}
+.gauge-config label:not(:last-child)::after{content:'›';position:absolute;right:-9px;top:9px;z-index:1;color:#618491;font:14px 'Space Mono',monospace}
+.gauge-config select{padding-left:7px;padding-right:20px;font-size:10px;min-height:36px}
+.loadout-lock{margin:14px 0 0;color:var(--muted);font-size:10px;line-height:1.8}
+#loadout-fieldset:disabled .loadout-lock{color:#efb76c}
+.loadout-notes{margin:17px 22px 21px;padding-top:14px;border-top:1px solid var(--line)}
+.loadout-notes p{margin:0;color:#9eb2bd;font-size:10px;line-height:1.9}
+.loadout-notes p+p{margin-top:7px;font-size:9px;color:var(--muted)}
+.loadout-notes b{color:#ff927b;font-weight:600}
+.loadout-notes kbd{font-size:8px;padding:1px 5px}
+.armament-status{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 22px 13px;font:9px 'Space Mono','Noto Sans JP',monospace;color:var(--muted);line-height:1.6}
+.armament-status i{font-style:normal;color:#3a5868;padding:0 7px}
+#defense-status{color:var(--cyan);text-align:right}
+@media(max-width:850px){.loadout summary{gap:16px}.loadout-index{display:none}.loadout-toggle{font-size:9px;gap:12px}.gauge-config{gap:7px}.gauge-config label{padding:10px 5px 5px}.gauge-config label:not(:last-child)::after{right:-7px}.power{gap:10px;padding-inline:16px}.power-label{font-size:9px}.power-label small{font-size:7px}#upgrades span{font-size:9px}#equip{padding:10px}.gauge-heading{display:block}.gauge-heading p{text-align:left;margin-top:7px}}
+@media(max-width:700px){.loadout summary{min-height:60px;padding:12px 14px;gap:10px;flex-wrap:wrap}.loadout-heading strong{font-size:11px;letter-spacing:1px}#loadout-summary{font-size:9px}.loadout-toggle{font-size:8px;gap:8px}.loadout-toggle>span{font-size:17px}#loadout-fieldset{padding:18px 14px 0}.loadout-selects{gap:14px;grid-template-columns:1fr}.config-field{gap:7px}.config-field small{font-size:7px}select{font-size:11px;min-height:44px}.craft-detail{font-size:10px;margin-bottom:18px}.gauge-heading small{font-size:7px}.gauge-heading p{font-size:9px}.gauge-config{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.gauge-config label{padding:8px 5px 5px}.gauge-config label>span{font-size:9px;margin-bottom:7px}.gauge-config select{min-height:40px}.gauge-config label:nth-child(3)::after{content:none}.loadout-lock{font-size:9px}.loadout-notes{margin:14px 14px 17px}.loadout-notes p{font-size:9px}.loadout-notes p+p{font-size:8px}.power{padding:10px;gap:7px}#upgrades span{font-size:8px;padding:12px 2px}#equip{padding:8px;font-size:10px}.armament-status{padding:0 10px 10px;gap:10px;font-size:8px}.armament-status i{padding:0 3px}}
+@media(max-width:420px){.loadout-toggle{flex-basis:100%;justify-content:space-between;margin-left:0}.loadout summary{row-gap:5px}#loadout-summary{margin-left:auto;font-size:8px}#upgrades{gap:2px}#upgrades span{font-size:7px}#equip kbd{display:none}.armament-status{font-size:7px}}
+@media(prefers-reduced-motion:reduce){.loadout summary,.loadout-toggle>span{transition:none}}
+#upgrades span.active-weapon:not(.selected){border-bottom:2px solid var(--cyan);background:#80f9e40a}#upgrades span.owned:not(.active-weapon):not(.selected){color:#8ba4b0}
+
+/* Mobile flight deck. Keep browser zoom available outside the game controls. */
+.play-tools{display:none}
+#joystick,.touch button,#equip,#pause{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+button,select{min-height:44px}
+ .touch button:active,.touch button.pressed{background:#80f9e41a;border-color:var(--cyan)}
+@media(max-width:700px),(pointer:coarse){
+ main{padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right))}
+ .play-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:0 12px;border-bottom:1px solid var(--line)}
+ .mobile-hint{margin:0;color:var(--cyan);font-size:10px;line-height:1.5}
+ .mobile-hint span{color:var(--muted);font-size:9px}
+ #focus-mode{display:flex;align-items:center;gap:8px;flex-shrink:0;font:10px 'Noto Sans JP',sans-serif;padding:8px 10px;border:0}
+ #focus-mode span{font-size:20px;line-height:1}
+ .touch{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:12px 0 0;padding:0 4px;color:var(--muted)}
+}
+/* These controls also work when focus mode is entered with a fine pointer. */
+ #joystick{position:relative;flex:0 0 126px;width:126px;height:126px;border:1px solid #3a5a68;border-radius:50%;background:radial-gradient(circle,#142e39 0 31%,#10212a 32% 56%,#0a1922 57%);box-shadow:inset 0 0 0 7px #0b171e,0 0 0 1px #040c12;cursor:grab}
+ #joystick::before,#joystick::after{content:'';position:absolute;background:#355564;pointer-events:none}
+ #joystick::before{left:50%;top:12px;bottom:12px;width:1px}
+ #joystick::after{top:50%;left:12px;right:12px;height:1px}
+ #joystick-knob{position:absolute;left:calc(50% - 24px);top:calc(50% - 24px);width:48px;height:48px;border:1px solid #6bacae;border-radius:50%;background:radial-gradient(circle at 35% 30%,#4a7d83,#193641 80%);box-shadow:0 5px 12px #0008,inset 0 0 0 4px #193641;z-index:1;pointer-events:none;will-change:transform}
+ #joystick.active,#joystick.pressed{border-color:var(--cyan);cursor:grabbing}
+ .joystick-label{position:absolute;bottom:9px;left:0;right:0;text-align:center;color:#628e9a;font:7px 'Space Mono',monospace;letter-spacing:3px;pointer-events:none}
+ .touch-guidance{min-width:0;text-align:center;font-size:9px;line-height:1.9}
+ .touch-guidance p{margin:0 0 7px}
+ .touch-guidance>span{color:#5d9291;font:7px 'Space Mono',monospace;letter-spacing:1px}
+ .touch-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;flex:0 0 145px}
+ .touch-actions button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;min-height:50px;padding:6px;font:10px 'Space Mono',monospace;background:#10232c}
+ .touch-actions button span{font:9px 'Noto Sans JP',sans-serif;color:#94b2be}
+ .touch-actions #touchpause{grid-column:1/-1;flex-direction:row;min-height:44px;gap:8px;background:transparent;font-size:10px}
+ .touch-actions #touchpower{border-color:#5eaba4;color:var(--cyan);background:#153c3f}
+ .touch-actions #touchpower span{color:var(--cyan)}
+@media(max-width:700px),(pointer:coarse){
+ .below>div{display:none}
+ .below{justify-content:flex-end;margin-top:10px}
+ .below label{min-height:44px;padding:4px 8px}
+ .below input{width:19px;height:19px;margin-right:3px}
+ #pause{min-width:44px;right:6px;top:6px;padding:8px}
+ select,.gauge-config select{min-height:44px;font-size:16px}
+ #upgrades span{min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.5}
+}
+@media(max-width:700px){
+ header{height:60px;gap:12px}
+ .brand{font-size:17px;letter-spacing:1px}
+ #sound{font-size:9px;padding-inline:10px}
+ .intro{padding:19px 0 18px;align-items:center;gap:12px}
+ .eyebrow{font-size:7px;letter-spacing:1.5px;margin-bottom:8px}
+ h1{font-size:25px;letter-spacing:1px}
+ .description{max-width:144px;font-size:9px}
+ .description span{margin-top:10px;font-size:7px;letter-spacing:0}
+ .gauge-config{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .gauge-config label:nth-child(3)::after{content:'›'}
+ .gauge-config label:nth-child(even)::after{content:none}
+ .hud{height:49px;padding:8px 10px;gap:12px;min-width:0}
+ .hud>div{min-width:0}
+ .hud small{font-size:7px;letter-spacing:1px;margin-bottom:3px}
+ .hud strong{font-size:12px;letter-spacing:1px}
+ .sector span{font-size:7px;display:block}
+ #lives{font-size:10px;white-space:nowrap}
+ .power{padding:8px;gap:7px}
+ #upgrades{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+ #upgrades span{font-size:8px;min-height:27px;padding:5px 2px;display:flex;align-items:center;justify-content:center}
+ #equip{align-self:stretch;min-width:47px;padding:8px 5px;font-size:10px}
+ #equip kbd{display:none}
+ .armament-status{font-size:7px;padding:0 8px 8px;gap:6px}
+ #overlay{padding:7px 14px}
+ #overline{font-size:7px;letter-spacing:2px;line-height:1.3;margin:0 0 3px}
+ h2{font-size:clamp(22px,6.5vw,38px);line-height:1.15;letter-spacing:4px;margin:0 0 3px}
+ #message{font-size:9px;line-height:1.5;letter-spacing:0;text-align:center;margin:4px 0;max-width:100%}
+ #start{min-height:44px;padding:9px 20px;margin:5px 0 0;min-width:160px}
+ #overlay>small{display:none}
+ #notice{font-size:9px;bottom:10px}
+ .touch{gap:7px;padding:0}
+ .touch-guidance{font-size:8px}
+ footer{margin-top:26px;line-height:1.8}
+}
+@media(max-width:390px){
+ .description{display:none}
+ .intro br{display:none}
+ .intro h1{font-size:24px}
+ .hud{gap:9px;padding-inline:8px}
+ .hud strong{font-size:11px}
+ .touch-guidance{display:none}
+ #joystick{width:116px;height:116px;flex-basis:116px}
+ .touch-actions{flex-basis:158px}
+ .mobile-hint span{display:none}
+}
+
+/* Focus mode works without relying on fullscreen support (including iPhone). */
+body.game-focus{overflow:hidden;overscroll-behavior:none}
+body.game-focus main{--focus-chrome:354px;position:fixed;inset:0;z-index:20;max-width:none;height:100vh;height:100dvh;padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:6px;background:#071219}
+body.game-focus header,body.game-focus .intro,body.game-focus .loadout,body.game-focus .below,body.game-focus footer{display:none}
+body.game-focus .cabinet{flex:1;min-height:0;display:flex;flex-direction:column;position:relative;box-shadow:none}
+body.game-focus .play-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;min-height:44px;padding-inline:12px}
+body.game-focus .hud{flex-shrink:0;height:44px}
+body.game-focus .screen{align-self:center;flex:0 0 auto;width:min(100%,calc((100dvh - var(--focus-chrome) - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 2.142857));aspect-ratio:1200/560;margin-block:auto;border-inline:1px solid var(--line)}
+body.game-focus canvas{width:100%;height:100%}
+body.game-focus .power{flex-shrink:0}
+body.game-focus .armament-status{flex-shrink:0}
+body.game-focus .touch{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-shrink:0;min-height:126px;margin:0;padding:0 8px;color:var(--muted)}
+@media(orientation:landscape) and (max-height:600px){
+ body.game-focus main{--focus-chrome:120px;padding-block:max(5px,env(safe-area-inset-top)) max(5px,env(safe-area-inset-bottom));gap:0}
+ body.game-focus .play-tools{position:absolute;right:0;top:0;z-index:3;border:0;padding:0 6px;min-height:44px;height:44px}
+ body.game-focus .mobile-hint{display:none}
+ body.game-focus #focus-mode{min-height:44px;font-size:9px;padding:6px}
+ body.game-focus .hud{height:44px;padding:5px 133px 5px 12px;gap:25px}
+ body.game-focus .hud small{font-size:7px;letter-spacing:1px;margin-bottom:2px}
+ body.game-focus .hud strong{font-size:12px}
+ body.game-focus .hud .sector{margin-right:0}
+ body.game-focus .sector span{font-size:7px}
+ body.game-focus #lives{font-size:10px}
+ body.game-focus .screen{width:min(calc(100% - 280px),calc((100dvh - var(--focus-chrome) - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 2.142857));transform:translateX(-15px)}
+ body.game-focus .power{padding:4px 8px;gap:8px;min-height:44px}
+ body.game-focus .power-label{display:none}
+ body.game-focus #upgrades{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+ body.game-focus #upgrades span{min-height:30px;padding:4px 2px;font-size:8px;line-height:1.3}
+ body.game-focus #equip{min-height:44px;align-self:center;padding:7px 10px;font-size:9px}
+ body.game-focus #equip kbd{display:none}
+ body.game-focus .armament-status{display:none}
+ body.game-focus .touch{position:absolute;z-index:4;top:calc(max(5px,env(safe-area-inset-top)) + 45px);bottom:calc(max(5px,env(safe-area-inset-bottom)) + 53px);left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));min-height:0;height:auto;padding:0 8px;gap:0;pointer-events:none}
+ body.game-focus .touch>*{pointer-events:auto}
+ body.game-focus #joystick{width:110px;height:110px;flex-basis:110px}
+ body.game-focus .touch-guidance{display:none}
+ body.game-focus .touch-actions{flex-basis:140px;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ body.game-focus .touch-actions #touchpause{grid-column:1/-1;flex-direction:row;min-height:44px;gap:8px}
+ body.game-focus .touch-actions button{min-height:64px}
+ body.game-focus #overlay{padding:4px 50px}
+ body.game-focus #overline{font-size:7px;letter-spacing:2px;line-height:1.3;margin:0 0 2px}
+ body.game-focus h2{font-size:26px;line-height:1.1;margin:0 0 3px;letter-spacing:5px}
+ body.game-focus #message{font-size:9px;line-height:1.4;letter-spacing:0;margin:3px 0;text-align:center}
+ body.game-focus #start{min-height:44px;padding:8px 20px;margin:4px 0;min-width:160px}
+ body.game-focus #overlay>small{display:none}
+ body.game-focus #notice{font-size:9px;bottom:10px}
+}
+@media(orientation:landscape) and (max-height:360px){
+ body.game-focus #overline{display:none}
+ body.game-focus h2{font-size:20px;line-height:1.1;margin:0 0 1px;letter-spacing:2px}
+ body.game-focus #message{font-size:8px;line-height:1.3;margin:2px 0}
+ body.game-focus #start{margin:2px 0}
+ body.game-focus #overlay{padding:2px 8px}
+}
