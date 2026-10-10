@@ -1,5 +1,7 @@
 # ORBITAL
 
+[▶ ブラウザーで遊ぶ（スマホ・PC）](https://tanekoh923.github.io/orbital-shooter/)
+
 グラディウスに着想を得た、オリジナルの横スクロールシューティングです。
 `index.html` をブラウザーで開くだけで遊べます。ビルド・インストール不要です。
 
