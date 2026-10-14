@@ -6,15 +6,16 @@ const OrbitalEnemies = require('./enemies.js');
 const OrbitalEncounters = require('./encounters.js');
 const OrbitalBosses = require('./bosses.js');
 const OrbitalRecords = require('./records.js');
+const OrbitalWeapons = require('./weapons.js');
 const { safeRoute } = require('./world.test.cjs');
 
 // Instrument a test-only copy; production exposes no debug controls.
 const production = readFileSync(__dirname + '/game.js', 'utf8');
 assert.match(production, /\}\)\(\);\s*$/);
 const source = production.replace(/\}\)\(\);\s*$/, `
-this.test={reset,launch,pause,update,hit,equip,shoot,updateShots,terrainY,draw,startStage,damageTarget,optionPosition,enemyBullet,resumeCheckpoint,rules,
+this.test={reset,launch,pause,update,hit,equip,shoot,updateShots,terrainY,draw,startStage,damageTarget,optionPosition,enemyBullet,resumeCheckpoint,rules,hud,
  bossVolley:()=>{boss.age=Math.max(2,boss.age);boss.cool=0;boss.transition=0;bosses.update(boss,.01,{ship,shoot:enemyBullet});},
- read:()=>({state,stageIndex,t,score,life,selection,ship,boss,bullets,enemies,shots,caps,particles,loadout,enemyWave,routePhase,mission,progress,trail}),
+ read:()=>({state,stageIndex,t,score,life,selection,ship,boss,bullets,enemies,shots,caps,particles,weaponFx,loadout,enemyWave,routePhase,mission,progress,trail}),
  quiet:()=>{spawn=999;fire=999;shots=[];enemies=[];bullets=[];caps=[];},
  collect:()=>{caps.push({x:ship.x,y:ship.y});update(0);},
  selectUpgrade:i=>{selection=ship.gauge.indexOf(i);},
@@ -105,7 +106,7 @@ function fixture(craft = 'vector', defense = 'guard', options = {}) {
     document,
     window: { addEventListener(type, fn) { winListeners.set(type, fn); }, matchMedia() { return { matches: !!options.touch }; } },
     localStorage,
-    requestAnimationFrame() {}, Math, console, OrbitalWorld, OrbitalEnemies, OrbitalEncounters, OrbitalBosses, OrbitalRecords,
+    requestAnimationFrame() {}, Math, console, OrbitalWorld: options.world || OrbitalWorld, OrbitalEnemies, OrbitalEncounters, OrbitalBosses, OrbitalRecords, OrbitalWeapons,
   });
   vm.runInContext(source, context);
   const g = context.test;
@@ -627,6 +628,122 @@ test('mobile equipment notices, practice labels and boss timers stay readable an
   g.update(.02); assert.match(elements.get('#boss-status').textContent, /第1形態/);
   g.pause(); const before = plain(g.read()); g.update(20); g.draw(20, 20);
   assert.deepEqual(plain(g.read()), before); assert.equal(g.read().boss.age, before.boss.age);
+});
+
+test('Lv.1 lasers stop at the nearest target regardless of enemy insertion order', () => {
+  const { g, start, equip, fire } = fixture(); start(); equip(2);
+  const laser = fire()[0], far = g.target(310, laser.y), near = g.target(250, laser.y);
+  g.updateShots(.2);
+  assert.equal(near.hp, 20 - 1.6); assert.equal(far.hp, 20); assert.equal(laser.dead, true);
+  g.updateShots(0); assert.equal(near.hp, 20 - 1.6); assert.equal(far.hp, 20);
+});
+
+test('Lv.2 lasers damage multiple targets once along their visible beam body', () => {
+  const { g, start, equip, fire } = fixture(); start(); equip(2); equip(2);
+  const laser = fire()[0], far = g.target(310, laser.y), near = g.target(250, laser.y);
+  g.updateShots(.2); assert.equal(near.hp, 20 - 2.1); assert.equal(far.hp, 20 - 2.1);
+  assert.ok(laser.path.length > 2); assert.ok(laser.path[0].x < near.x);
+  const behindTip = g.target(280, laser.y); g.updateShots(0);
+  assert.equal(behindTip.hp, 20 - 2.1, 'new targets touching the still visible body take damage');
+  assert.equal(near.hp, 20 - 2.1); assert.equal(far.hp, 20 - 2.1);
+  assert.ok(g.read().weaponFx.every(effect => effect.kind === 'pierce'));
+});
+
+function wallFixture() {
+  const collides = (stage, x, y, r, time, resolve) => {
+    if (x >= 300 && x <= 315) return { hit: true, source: { x, y, kind: 'wall' } };
+    return OrbitalWorld.collides(stage, x, y, r, time, resolve);
+  };
+  return fixture('vector', 'guard', { world: { ...OrbitalWorld, collides,
+    collider(stage, time) { return (x, y, r) => collides(stage, x, y, r, time, false); },
+  } });
+}
+
+test('a fast laser is stopped by a thin wall instead of hitting beyond it', () => {
+  const { g, start, equip, fire } = wallFixture(); start(); equip(2); equip(2);
+  const laser = fire()[0], beyond = g.target(365, laser.y); g.updateShots(.24);
+  assert.equal(laser.dead, true); assert.equal(beyond.hp, 20);
+  assert.ok(g.read().weaponFx.some(effect => effect.kind === 'blocked' && effect.x >= 300 && effect.x <= 308));
+});
+
+test('a target before terrain receives its laser hit during the same flight step', () => {
+  const { g, start, equip, fire } = wallFixture(); start(); equip(2); equip(2);
+  const laser = fire()[0], near = g.target(250, laser.y), beyond = g.target(365, laser.y);
+  g.updateShots(.24); assert.equal(near.hp, 20 - 2.1); assert.equal(beyond.hp, 20);
+  assert.equal(laser.dead, true);
+});
+
+test('laser visuals retain original shot speed, damage, branch count and OPTION strength', () => {
+  const stats = {
+    vector: { speed: 760, damage: [1.6, 2.1], count: [1, 1] },
+    tempest: { speed: 650, damage: [1.3, 1.8], count: [1, 1] },
+    lancer: { speed: 560, damage: [1.6, 2.4], count: [1, 1] },
+    prism: { speed: 710, damage: [.9, .9], count: [2, 3] },
+  };
+  for (const [craft, expected] of Object.entries(stats)) {
+    const { g, start, equip, fire } = fixture(craft); start();
+    for (let level = 1; level <= 2; level++) {
+      equip(2); const shots = fire(); assert.equal(shots.length, expected.count[level - 1]);
+      assert.ok(shots.every(s => s.vx === expected.speed && s.damage === expected.damage[level - 1]));
+      g.clearShots(); g.shoot(g.read().ship.x, g.read().ship.y, true);
+      assert.ok(g.read().shots.every(s => s.damage === expected.damage[level - 1] * .5));
+    }
+  }
+  const f = fixture(); f.start(); f.equip(2); f.elements.get('#auto').checked = true;
+  f.g.fireNow(); f.g.update(0); assert.equal(f.g.read().shots.length, 1);
+  f.g.update(.15); assert.equal(f.g.read().shots.length, 1);
+  f.g.update(.010001); assert.equal(f.g.read().shots.length, 2, 'the firing interval remains 0.16 seconds');
+});
+
+test('LANCER shows its actual blast boundary, while rejected boss laser hits show BLOCK only', () => {
+  for (const [level, radius] of [[1, 38], [2, 65]]) {
+    const { g, start, equip, fire } = fixture('lancer'); start();
+    for (let i = 0; i < level; i++) equip(2);
+    const orb = fire()[0]; g.target(orb.x, orb.y); g.updateShots(0);
+    const ring = g.read().weaponFx.find(effect => effect.kind === 'splash');
+    assert.ok(ring); assert.equal(ring.radius, radius); assert.equal(ring.radius, orb.splash);
+  }
+  for (const craft of ['vector', 'lancer']) {
+    const f = fixture(craft), { g } = f; f.change('#mode-select', 'boss'); f.start();
+    const boss = g.read().boss; boss.core.open = false; boss.transition = 0; boss.age = 2;
+    g.read().ship.x = boss.core.x - 24; g.read().ship.y = boss.core.y;
+    const hp = boss.hp, particles = g.read().particles.length; f.fire(); g.updateShots(0);
+    assert.equal(boss.hp, hp); assert.equal(g.read().particles.length, particles);
+    assert.ok(g.read().weaponFx.some(effect => effect.kind === 'blocked'));
+    assert.ok(g.read().weaponFx.every(effect => effect.kind === 'blocked'));
+  }
+});
+
+test('weapon status explains equipped level and retained laser levels after switching DOUBLE', () => {
+  for (const craft of ['vector', 'tempest', 'lancer', 'prism']) {
+    const { g, start, equip, elements } = fixture(craft); start(); equip(2);
+    const name = elements.get('#weapon-name'), effect = elements.get('#weapon-effect');
+    assert.match(name.textContent, /Lv\.1/); assert.equal(effect.textContent, OrbitalWeapons.describe(craft, 1).effect);
+    equip(2); assert.match(name.textContent, /Lv\.2/);
+    assert.equal(effect.textContent, OrbitalWeapons.describe(craft, 2).effect);
+    equip(5); assert.match(name.textContent, /DOUBLE/); assert.equal(g.read().ship.up[2], 2);
+    equip(2); assert.match(name.textContent, /Lv\.2/); assert.equal(g.read().ship.up[2], 2);
+    assert.equal(effect.textContent, OrbitalWeapons.describe(craft, 2).effect);
+  }
+});
+
+test('an open boss core with a spent damage budget does not falsely block a piercing laser', () => {
+  const f = fixture(), { g } = f; f.change('#mode-select', 'boss'); f.start();
+  const boss = g.read().boss; boss.core.open = true; boss.transition = 0; boss.age = 2; boss.damageBudget = 0;
+  g.read().ship.x = boss.core.x - 24; g.read().ship.y = boss.core.y;
+  const hp = boss.hp, laser = f.fire().find(s => s.laser); g.updateShots(0);
+  assert.equal(boss.hp, hp); assert.equal(laser.dead, undefined);
+  assert.ok(g.read().weaponFx.every(effect => effect.kind !== 'blocked'));
+});
+
+test('laser effects freeze on pause, expire during play and reset for a new stage', () => {
+  const f = fixture(), { g } = f; f.start(); f.equip(2); f.equip(2);
+  const laser = f.fire()[0]; g.target(laser.x, laser.y); g.updateShots(0);
+  assert.ok(g.read().weaponFx.length > 0); g.pause(); const before = plain(g.read().weaponFx);
+  g.update(3); g.draw(3, 3); assert.deepEqual(plain(g.read().weaponFx), before);
+  g.pause(); g.update(.3); assert.equal(g.read().weaponFx.length, 0);
+  g.target(laser.x, laser.y); g.updateShots(0); assert.ok(g.read().weaponFx.length > 0);
+  g.startStage(1); assert.equal(g.read().weaponFx.length, 0);
 });
 
 test('headless full-length campaign follows a safe route without invalid or runaway entities', () => {

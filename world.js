@@ -123,6 +123,37 @@
   if(!resolve)return {hit:true,source};
   return {hit:true,source,safeY:safePosition(stage,t,b,items,x,y,radius)};
  }
+ // Beam bodies sample many points in one frame. Capture the same terrain edges
+ // and hazards once so those probes do not rebuild the scrolling world each time.
+ function collider(stageIndex,time){
+  const stage=stageOf(stageIndex),t=timeOf(time),offset=t*scrollSpeed;
+  const first=Math.floor((offset-160)/step),last=Math.ceil((offset+width+160)/step);
+  const tops=new Float64Array(last-first+1),bottoms=new Float64Array(last-first+1);
+  for(let i=0;i<tops.length;i++){const b=raw(stage,(first+i)*step,t);tops[i]=b.top;bottoms[i]=b.bottom}
+  const items=hazards(stage,t).filter(h=>h.active);
+  return function(x,y,r){
+   const radius=Math.max(0,Number.isFinite(r)?r:15),from=Math.floor((x-radius+offset)/step),to=Math.floor((x+radius+offset)/step);
+   if(!Number.isFinite(x)||!Number.isFinite(y)||from<first||to>=last)return collides(stage,x,y,radius,t,false);
+   const worldIndex=Math.floor((x+offset)/step),index=worldIndex-first,f=(x+offset-worldIndex*step)/step;
+   const top=mix(tops[index],tops[index+1],f),bottom=mix(bottoms[index],bottoms[index+1],f);
+   if(y<top)return {hit:true,source:{x,y:top,kind:'ceiling'}};
+   if(y>bottom)return {hit:true,source:{x,y:bottom,kind:'floor'}};
+   for(let worldIndex=from;worldIndex<=to;worldIndex++){
+    const i=worldIndex-first,left=worldIndex*step-offset;
+    for(const edge of ['top','bottom']){
+     const values=edge==='top'?tops:bottoms,a=values[i],c=values[i+1];
+     if(y+radius<Math.min(a,c)||y-radius>Math.max(a,c))continue;
+     const dy=c-a,u=clamp(((x-left)*step+(y-a)*dy)/(step*step+dy*dy),0,1),nearestX=left+u*step,nearestY=a+u*dy;
+     if(Math.hypot(x-nearestX,y-nearestY)<radius)return {hit:true,source:{x:nearestX,y:nearestY,kind:edge==='top'?'ceiling':'floor'}};
+    }
+   }
+   for(const h of items){
+    if(x+radius<(h.r?h.x-h.r:h.x)||x-radius>(h.r?h.x+h.r:h.x+h.w)||y+radius<(h.r?h.y-h.r:h.y)||y-radius>(h.r?h.y+h.r:h.y+h.h))continue;
+    if(touches(h,x,y,radius))return {hit:true,source:{x:h.r?h.x:clamp(x,h.x,h.x+h.w),y:h.r?h.y:clamp(y,h.y,h.y+h.h),kind:h.kind,id:h.id}};
+   }
+   return {hit:false};
+  };
+ }
  function describe(stageIndex,time){
   const stage=stageOf(stageIndex),t=timeOf(time);
   if(t>=durations[stage]-5)return 'ボス接近 / 開けた戦闘空域';
@@ -239,5 +270,5 @@
   surface(ctx,stage,t,theme,true);surface(ctx,stage,t,theme,false);
   for(const h of hazards(stage,t))hazard(ctx,h,t,theme);
  }
- return {width,height,scrollSpeed,durations,bounds,hazards,describe,collides,draw};
+ return {width,height,scrollSpeed,durations,bounds,hazards,describe,collides,collider,draw};
 });

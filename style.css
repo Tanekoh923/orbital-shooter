@@ -24,6 +24,14 @@ select{width:100%;min-width:0;min-height:42px;padding:10px 30px 10px 12px;border
 select:hover{border-color:var(--cyan)}
 select:disabled{cursor:not-allowed;color:#758e9a;border-color:var(--line)}
 .craft-detail{margin:12px 0 23px;color:#9eb2bd;font-size:11px;line-height:1.9}
+.laser-preview-panel{display:grid;grid-template-columns:minmax(220px,360px) minmax(0,1fr);align-items:center;gap:23px;margin:0 0 23px;padding:13px;border:1px solid #38515e;background:#08151c}
+.laser-preview-visual{position:relative;min-width:0;overflow:hidden;background:#030c17;border:1px solid var(--line)}
+.laser-preview-label{position:absolute;top:7px;left:10px;z-index:1;color:#8eafb9;font:8px 'Space Mono',monospace;letter-spacing:1px;pointer-events:none}
+#laser-preview{display:block;width:100%;height:auto;aspect-ratio:360/96;touch-action:auto}
+.laser-preview-copy{min-width:0}
+.laser-preview-copy strong{font:700 11px 'Space Mono','Noto Sans JP',monospace;color:var(--cyan);line-height:1.6}
+.laser-preview-copy p{margin:8px 0;color:#d2e5e9;font-size:11px;line-height:1.8;overflow-wrap:anywhere}
+.laser-preview-copy small{display:block;color:#8fa8b5;font-size:9px;line-height:1.8}
 .gauge-heading{display:flex;justify-content:space-between;gap:18px;align-items:baseline;margin-bottom:12px}
 .gauge-heading>label{font-size:11px;white-space:nowrap}
 .gauge-heading small{margin-left:12px}
@@ -43,6 +51,9 @@ select:disabled{cursor:not-allowed;color:#758e9a;border-color:var(--line)}
 .armament-status{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 22px 13px;font:9px 'Space Mono','Noto Sans JP',monospace;color:var(--muted);line-height:1.6}
 .armament-status i{font-style:normal;color:#3a5868;padding:0 7px}
 #defense-status{color:var(--cyan);text-align:right}
+#weapon-status{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:12px;border-top:1px solid var(--line);padding:7px 22px;background:#09171e;color:#a6bbc6;font:9px 'Space Mono','Noto Sans JP',monospace;line-height:1.6}
+#weapon-name{color:var(--cyan);font-size:10px;white-space:nowrap}
+#weapon-effect{min-width:0;overflow-wrap:anywhere}
 @media(max-width:850px){.loadout summary{gap:16px}.loadout-index{display:none}.loadout-toggle{font-size:9px;gap:12px}.gauge-config{gap:7px}.gauge-config label{padding:10px 5px 5px}.gauge-config label:not(:last-child)::after{right:-7px}.power{gap:10px;padding-inline:16px}.power-label{font-size:9px}.power-label small{font-size:7px}#upgrades span{font-size:9px}#equip{padding:10px}.gauge-heading{display:block}.gauge-heading p{text-align:left;margin-top:7px}}
 @media(max-width:700px){.loadout summary{min-height:60px;padding:12px 14px;gap:10px;flex-wrap:wrap}.loadout-heading strong{font-size:11px;letter-spacing:1px}#loadout-summary{font-size:9px}.loadout-toggle{font-size:8px;gap:8px}.loadout-toggle>span{font-size:17px}#loadout-fieldset{padding:18px 14px 0}.loadout-selects{gap:14px;grid-template-columns:1fr}.config-field{gap:7px}.config-field small{font-size:7px}select{font-size:11px;min-height:44px}.craft-detail{font-size:10px;margin-bottom:18px}.gauge-heading small{font-size:7px}.gauge-heading p{font-size:9px}.gauge-config{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.gauge-config label{padding:8px 5px 5px}.gauge-config label>span{font-size:9px;margin-bottom:7px}.gauge-config select{min-height:40px}.gauge-config label:nth-child(3)::after{content:none}.loadout-lock{font-size:9px}.loadout-notes{margin:14px 14px 17px}.loadout-notes p{font-size:9px}.loadout-notes p+p{font-size:8px}.power{padding:10px;gap:7px}#upgrades span{font-size:8px;padding:12px 2px}#equip{padding:8px;font-size:10px}.armament-status{padding:0 10px 10px;gap:10px;font-size:8px}.armament-status i{padding:0 3px}}
 @media(max-width:420px){.loadout-toggle{flex-basis:100%;justify-content:space-between;margin-left:0}.loadout summary{row-gap:5px}#loadout-summary{margin-left:auto;font-size:8px}#upgrades{gap:2px}#upgrades span{font-size:7px}#equip kbd{display:none}.armament-status{font-size:7px}}
@@ -138,7 +149,7 @@ button,select{min-height:44px}
 
 /* Focus mode works without relying on fullscreen support (including iPhone). */
 body.game-focus{overflow:hidden;overscroll-behavior:none}
-body.game-focus main{--focus-chrome:354px;position:fixed;inset:0;z-index:20;max-width:none;height:100vh;height:100dvh;padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:6px;background:#071219}
+body.game-focus main{--focus-chrome:386px;position:fixed;inset:0;z-index:20;max-width:none;height:100vh;height:100dvh;padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:6px;background:#071219}
 body.game-focus header,body.game-focus .intro,body.game-focus .loadout,body.game-focus .below,body.game-focus footer{display:none}
 body.game-focus .cabinet{flex:1;min-height:0;display:flex;flex-direction:column;position:relative;box-shadow:none}
 body.game-focus .play-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;min-height:44px;padding-inline:12px}
@@ -147,9 +158,10 @@ body.game-focus .screen{align-self:center;flex:0 0 auto;width:min(100%,calc((100
 body.game-focus canvas{width:100%;height:100%}
 body.game-focus .power{flex-shrink:0}
 body.game-focus .armament-status{flex-shrink:0}
+body.game-focus #weapon-status{flex-shrink:0}
 body.game-focus .touch{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-shrink:0;min-height:126px;margin:0;padding:0 8px;color:var(--muted)}
 @media(orientation:landscape) and (max-height:600px){
- body.game-focus main{--focus-chrome:120px;padding-block:max(5px,env(safe-area-inset-top)) max(5px,env(safe-area-inset-bottom));gap:0}
+ body.game-focus main{--focus-chrome:146px;padding-block:max(5px,env(safe-area-inset-top)) max(5px,env(safe-area-inset-bottom));gap:0}
  body.game-focus .play-tools{position:absolute;right:0;top:0;z-index:3;border:0;padding:0 6px;min-height:44px;height:44px}
  body.game-focus .mobile-hint{display:none}
  body.game-focus #focus-mode{min-height:44px;font-size:9px;padding:6px}
@@ -167,7 +179,9 @@ body.game-focus .touch{display:flex;justify-content:space-between;align-items:ce
  body.game-focus #equip{min-height:44px;align-self:center;padding:7px 10px;font-size:9px}
  body.game-focus #equip kbd{display:none}
  body.game-focus .armament-status{display:none}
- body.game-focus .touch{position:absolute;z-index:4;top:calc(max(5px,env(safe-area-inset-top)) + 45px);bottom:calc(max(5px,env(safe-area-inset-bottom)) + 53px);left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));min-height:0;height:auto;padding:0 8px;gap:0;pointer-events:none}
+ body.game-focus #weapon-status{min-height:24px;padding:4px 10px;font-size:8px;gap:9px}
+ body.game-focus #weapon-name{font-size:8px}
+ body.game-focus .touch{position:absolute;z-index:4;top:calc(max(5px,env(safe-area-inset-top)) + 45px);bottom:calc(max(5px,env(safe-area-inset-bottom)) + 77px);left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));min-height:0;height:auto;padding:0 8px;gap:0;pointer-events:none}
  body.game-focus .touch>*{pointer-events:auto}
  body.game-focus #joystick{width:110px;height:110px;flex-basis:110px}
  body.game-focus .touch-guidance{display:none}
@@ -181,6 +195,16 @@ body.game-focus .touch{display:flex;justify-content:space-between;align-items:ce
  body.game-focus #start{min-height:44px;padding:8px 20px;margin:4px 0;min-width:160px}
  body.game-focus #overlay>small{display:none}
  body.game-focus #notice{font-size:9px;bottom:10px}
+}
+
+@media(max-width:700px){
+ .laser-preview-panel{grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:19px;padding:11px}
+ .laser-preview-visual{width:100%;max-width:360px;justify-self:center}
+ .laser-preview-copy strong{font-size:10px}
+ .laser-preview-copy p{font-size:10px;margin-block:6px}
+ .laser-preview-copy small{font-size:9px}
+ #weapon-status{padding:6px 8px;gap:8px;font-size:8px}
+ #weapon-name{font-size:9px}
 }
 @media(orientation:landscape) and (max-height:360px){
  body.game-focus #overline{display:none}

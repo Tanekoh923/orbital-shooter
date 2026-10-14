@@ -5,6 +5,49 @@ const Enemies = require('./enemies.js');
 function test(name, run) { if (require.main === module) { run(); console.log('PASS: ' + name); } }
 const plain = value => JSON.parse(JSON.stringify(value));
 
+function equivalentProbe(probe,stage,time,x,y,radius){
+  const expected=World.collides(stage,x,y,radius,time,false),actual=probe(x,y,radius);
+  assert.equal(actual.hit,expected.hit,`snapshot collision differs at stage ${stage+1}, time ${time}, point ${x}/${y}, radius ${radius}`);
+  if(expected.source){
+    assert.equal(actual.source.kind,expected.source.kind);assert.equal(actual.source.id,expected.source.id);
+    assert.ok(Math.abs(actual.source.x-expected.source.x)<1e-7);assert.ok(Math.abs(actual.source.y-expected.source.y)<1e-7);
+  }
+}
+
+test('beam collision snapshots match terrain probes near every stage wall and outside the cached viewport',()=>{
+  for(let stage=0;stage<5;stage++)for(const time of [0,4.99,5,8.377,19.111,30.417,World.durations[stage]-9.1,World.durations[stage]-9,World.durations[stage]-5]){
+    const probe=World.collider(stage,time);
+    for(const x of [-220,-159.75,-17,0,8,170.25,599,1100,1200,1359.25,1500]){
+      const b=World.bounds(stage,x,time);
+      for(const radius of [0,2,3,7,10,15,40])for(const y of [b.top-1,b.top+radius-.25,b.top+radius+.25,(b.top+b.bottom)/2,b.bottom-radius-.25,b.bottom-radius+.25,b.bottom+1]){
+        equivalentProbe(probe,stage,time,x,y,radius);
+      }
+    }
+  }
+});
+
+test('beam collision snapshots preserve active hazard edges and harmless warnings',()=>{
+  const kinds=new Set(),warnings=new Set();
+  for(let stage=0;stage<5;stage++)for(let time=5;time<World.durations[stage]-9;time+=.73){
+    const probe=World.collider(stage,time);
+    for(const h of World.hazards(stage,time)){
+      kinds.add(h.kind);if(h.warning)warnings.add(h.kind);
+      const x=h.r?h.x:h.x+h.w/2,y=h.r?h.y:h.y+h.h/2,right=h.r?h.x+h.r:h.x+h.w;
+      for(const radius of [0,2,10,15])for(const px of [x,right+radius-.25,right+radius+.25])equivalentProbe(probe,stage,time,px,y,radius);
+    }
+  }
+  assert.deepEqual([...kinds].sort(),['gate','pillar','rock','vent']);
+  assert.deepEqual([...warnings].sort(),['gate','vent']);
+});
+
+test('collision snapshots retain their original scrolling geometry and do not expose mutable hazard data',()=>{
+  const stage=4,time=20,h=World.hazards(stage,time).find(h=>h.active),probe=World.collider(stage,time);
+  const x=h.x+h.w/2,y=h.y+h.h/2,original=probe(x,y,2);
+  assert.equal(original.source.id,h.id);original.source.kind='changed externally';
+  World.collider(0,0)(x,y,2);World.collider(4,50)(x,y,2);
+  equivalentProbe(probe,stage,time,x,y,2);
+});
+
 test('five terrain profiles preserve a navigable passage across the full viewport', () => {
   assert.deepEqual(plain(World.durations), [65, 60, 60, 60, 70]);
   assert.equal(World.scrollSpeed, 90);

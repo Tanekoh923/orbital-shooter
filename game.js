@@ -1,7 +1,8 @@
 (() => {
 'use strict';
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d'),$=s=>document.querySelector(s),W=1200,H=560;
-const world=OrbitalWorld,foes=OrbitalEnemies,encounters=OrbitalEncounters,bosses=OrbitalBosses,records=OrbitalRecords;
+const world=OrbitalWorld,foes=OrbitalEnemies,encounters=OrbitalEncounters,bosses=OrbitalBosses,records=OrbitalRecords,weapons=OrbitalWeapons;
+const previewCtx=$('#laser-preview').getContext('2d');
 const keys=new Set(),names=['SPEED','MISSILE','LASER','OPTION','SHIELD','DOUBLE'];
 const crafts={
  vector:{name:'VECTOR',color:'#80f9e4',description:'直進レーザー / 斜め上ダブル / 下向きミサイル。前方への集中攻撃。'},
@@ -47,6 +48,9 @@ function renderLoadout(){
  $('#craft-select').value=loadout.craft;$('#defense-select').value=loadout.defense;
  document.querySelectorAll('[data-gauge-slot]').forEach(el=>{el.value=String(loadout.gauge[Number(el.dataset.gaugeSlot)])});
  $('#craft-detail').textContent=crafts[loadout.craft].description;
+ $('#laser-preview-title').textContent=crafts[loadout.craft].name+' / '+weapons.describe(loadout.craft,1).name.replace(' Lv.1','');
+ $('#laser-preview-effect').textContent=weapons.describe(loadout.craft,1).preview;
+ weapons.preview(previewCtx,loadout.craft);
  $('#loadout-summary').textContent=crafts[loadout.craft].name+' / '+defenses[loadout.defense].name+(configurable()?' / 出撃前に変更できます':' / 任務中は設定固定');
  renderMission();
 }
@@ -63,7 +67,7 @@ const stages=[
 ];
 let stageIndex=0;
 function startStage(index){
- stageIndex=index;t=0;shots=[];enemies=[];bullets=[];caps=[];trail=[];particles=[];boss=null;spawn=0;enemyWave=0;routePhase='';fire=0;clearTouch();keys.clear();
+ stageIndex=index;t=0;shots=[];enemies=[];bullets=[];caps=[];trail=[];particles=[];weaponFx=[];boss=null;spawn=0;enemyWave=0;routePhase='';fire=0;clearTouch();keys.clear();
  ship.x=170;ship.y=280;ship.inv=2;state='playing';
  $('#retry').classList.add('hidden');$('#boss-status').textContent='';
  const stage=stages[index];$('#overlay').classList.add('hidden');$('#sector').textContent=`${mission.mode==='campaign'?(mission.ranked?'STAGE':'CONTINUE'):'PRACTICE'} ${index+1} / ${stages.length} · ${rules().name}`;$('#progress').textContent=stage.name;$('#pause').textContent='Ⅱ';
@@ -76,7 +80,7 @@ function ensureBoss(){
  if(mission.mode==='campaign'){progress.unlockedBoss=Math.max(progress.unlockedBoss,stageIndex);persist()}
 }
 function clearStage(){
- score+=5000*(stageIndex+1);boss=null;shots=[];enemies=[];bullets=[];caps=[];keys.clear();clearTouch();
+ score+=5000*(stageIndex+1);boss=null;shots=[];enemies=[];bullets=[];caps=[];weaponFx=[];keys.clear();clearTouch();
  $('#boss-status').textContent='';
  if(mission.mode!=='campaign'){finish(true);return}
  progress.unlockedStage=Math.max(progress.unlockedStage,Math.min(4,stageIndex+1));progress.unlockedBoss=Math.max(progress.unlockedBoss,progress.unlockedStage);persist();
@@ -88,7 +92,7 @@ function clearStage(){
 }
 function launch(){if(state==='stageclear')startStage(stageIndex+1);else reset()}
 function enemyBullet(x,y,angle,speed=190,r=5){const velocity=speed*rules().bulletSpeed;bullets.push({x,y,vx:Math.cos(angle)*velocity,vy:Math.sin(angle)*velocity,r})}
-let state='ready',t=0,last=0,score=0,best=0,life=3,selection=-1,ship,shots=[],enemies=[],bullets=[],caps=[],particles=[],trail=[],boss=null,spawn=0,enemyWave=0,routePhase='',fire=0,noticeTime=0,sound=false,audio=null,pointer=null;
+let state='ready',t=0,last=0,score=0,best=0,life=3,selection=-1,ship,shots=[],enemies=[],bullets=[],caps=[],particles=[],trail=[],weaponFx=[],boss=null,spawn=0,enemyWave=0,routePhase='',fire=0,noticeTime=0,sound=false,audio=null,pointer=null;
 const touchMove={x:0,y:0,id:null};
 let dragPointer=null,firePointer=null;
 function clearTouch(){
@@ -110,6 +114,12 @@ function hud(){
   el.textContent=names[i]+(level?' '+(i===1||i===2||i===5?'Lv.':'')+level:'');el.classList.toggle('selected',!configurable()&&selection===slot);el.classList.toggle('owned',level>0);el.classList.toggle('active-weapon',active);el.title=(i===2||i===5)&&level&&!active?'レベル保持・現在は未選択':names[i];
  });
  $('#defense-status').textContent=!ship||configurable()?'未装備':ship.up[4]?(defenses[ship.defense].name+' / '+(ship.defense==='limit'?Math.max(0,ship.shieldTime).toFixed(1)+'s':ship.up[4])):'SHIELD OFF';
+ const laser=ship&&!configurable()&&ship.weapon===2,detail=laser?weapons.describe(ship.craft,ship.up[2]):null;
+ const weaponName=detail?detail.name:ship&&!configurable()&&ship.weapon===5?'DOUBLE Lv.'+ship.up[5]:'通常ショット';
+ const weaponEffect=detail?detail.effect:ship&&!configurable()&&ship.weapon===5?'複数方向へ射撃':'青いカプセルでLASERを選び、装備';
+ if($('#weapon-name').textContent!==weaponName)$('#weapon-name').textContent=weaponName;
+ if($('#weapon-effect').textContent!==weaponEffect)$('#weapon-effect').textContent=weaponEffect;
+ $('#weapon-status').classList.toggle('laser-equipped',!!laser);
 }
 function reset(){
  saveSettings();const config=progress.settings;mission={mode:config.mode,difficulty:config.difficulty,ranked:config.mode==='campaign'};score=0;life=rules().hull;selection=-1;best=progress.records[mission.difficulty];
@@ -129,7 +139,7 @@ function equip(){
  if((i===4&&ship.up[4]>0)||(ship.up[i]>=max&&(!(i===2||i===5)||ship.weapon===i))){notify(names[i]+' MAX / 別の装備を選択');return}
  if(i===4){ship.up[4]=max;if(ship.defense==='limit')ship.shieldTime=3}else ship.up[i]=Math.min(max,ship.up[i]+1);
  if(i===2||i===5)ship.weapon=i;
- selection=-1;notify(names[i]+' EQUIPPED');beep(1000,.2,'sine');hud();
+ selection=-1;notify(i===2?weapons.describe(ship.craft,ship.up[2]).name+' / '+weapons.describe(ship.craft,ship.up[2]).effect:names[i]+' EQUIPPED');beep(1000,.2,'sine');hud();
 }
 function burst(x,y,color,count=20){const limit=Math.min(count,Math.max(0,600-particles.length));for(let i=0;i<limit;i++){const a=Math.random()*Math.PI*2,s=30+Math.random()*170;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.3+Math.random()*.5,color})}}
 function finish(win){
@@ -151,7 +161,7 @@ function hit(source={x:ship.x,y:ship.y},terrain=false){
 function pause(){if(!['playing','paused'].includes(state))return;state=state==='playing'?'paused':'playing';keys.clear();clearTouch();syncPause();notify(state==='paused'?'PAUSED / 再開ボタンで続行':'');}
 function shoot(x,y,option=false){
  const type=ship.craft,mode=ship.weapon,level=mode===null?0:ship.up[mode],strength=option ? .5 : 1;
- const add=(vx,vy,extra={})=>shots.push({x:x+24,y,baseY:y,vx,vy,age:0,damage:strength,hit:new Set(),...extra});
+ const add=(vx,vy,extra={})=>shots.push(weapons.decorate({x:x+24,y,baseY:y,vx,vy,age:0,damage:strength,hit:new Set(),...extra},type,level,option));
  if(mode===2){
   if(type==='vector')add(760,0,{laser:true,pierce:level===2,damage:(level===2?2.1:1.6)*strength});
   if(type==='tempest')add(650,0,{wave:true,amplitude:level===2?30:15,r:level===2?10:7,damage:(level===2?1.8:1.3)*strength});
@@ -179,37 +189,46 @@ function resolveTerrain(){
  pointer=null;
 }
 function shotHit(s,target,radius){
- const ax=s.prevX??s.x,ay=s.prevY??s.y,dx=s.x-ax,dy=s.y-ay,den=dx*dx+dy*dy;
- const u=den?Math.max(0,Math.min(1,((target.x-ax)*dx+(target.y-ay)*dy)/den)):0;
- return Math.hypot(target.x-(ax+u*dx),target.y-(ay+u*dy))<radius+(s.r||3);
+ return weapons.contact(weapons.path(s),target,radius+(s.r||3));
 }
 function damageTarget(target,s){
- if(target.hp<=0)return;
+ if(target.hp<=0)return false;
  const bossTarget=boss&&(target===boss.core||boss.parts.includes(target));
- if(bossTarget){const result=bosses.damage(boss,target,s);if(!result.accepted)return;if(result.partDestroyed){score+=150;burst(target.x,target.y,'#d8edff',28);hud()}if(result.phaseChanged)bullets=[]}
+ if(bossTarget){const result=bosses.damage(boss,target,s);if(!result.accepted)return false;if(result.partDestroyed){score+=150;burst(target.x,target.y,'#d8edff',28);hud()}if(result.phaseChanged)bullets=[]}
  else target.hp-=s.damage*foes.damageScale(target,s);
  burst(target.x,target.y,'#ffbe8d',4);
  if(!bossTarget&&target.hp<=0){score+=target.score||100;burst(target.x,target.y,'#ffad77');if(target.drop)caps.push({x:target.x,y:target.y});hud();beep(150,.08)}
+ return true;
 }
+function weaponImpact(kind,x,y,s,radius=0){if(weaponFx.length<64)weaponFx.push(weapons.impact(kind,x,y,s.craft||ship.craft,radius))}
 function updateShots(dt){
+ const probe=world.collider(stageIndex,t);
  for(const s of shots){
+  if(s.dead)continue;
   s.prevX=s.x;s.prevY=s.y;s.age+=dt;
   if(s.homing){const target=enemies.find(e=>e.hp>0&&e.x>s.x)||boss;if(target){const a=Math.atan2(target.y-s.y,target.x-s.x),blend=Math.min(1,dt*4);s.vx+=(Math.cos(a)*360-s.vx)*blend;s.vy+=(Math.sin(a)*360-s.vy)*blend}}
   s.x+=s.vx*dt;s.y=s.wave?s.baseY+Math.sin(s.age*22)*s.amplitude:s.y+s.vy*dt;
   if(s.bounce&&(s.y<34||s.y>H-40)){s.y=Math.max(34,Math.min(H-40,s.y));s.vy*=-1}
   if(s.ground&&(s.grounded||s.y>terrainY(s.x)-8)){s.grounded=true;s.y=terrainY(s.x)-8;s.vy=0;s.vx=410}
-  if(world.collides(stageIndex,s.x,s.y,s.ground?2:(s.r||2),t,false).hit){s.dead=true;continue}
-  for(const target of [...enemies,...(boss?bosses.targets(boss):[])]){
-   if(target.hp<=0||s.hit.has(target)||!shotHit(s,target,target.r||23))continue;
-   s.hit.add(target);damageTarget(target,s);
-   if(s.splash){burst(s.x,s.y,crafts[ship.craft].color,16);for(const other of [...enemies,...(boss?bosses.targets(boss):[])])if(other!==target&&other.hp>0&&Math.hypot(other.x-s.x,other.y-s.y)<s.splash)damageTarget(other,{...s,damage:s.damage*.65})}
+  const obstruction=s.laser||s.wave?weapons.advance(s,dt,(x,y,r)=>probe(x,y,r).hit):probe(s.x,s.y,s.ground?2:(s.r||2)).hit?{x:s.x,y:s.y}:null;
+  if(obstruction&&(!(s.laser||s.wave)||s.occluded)){s.dead=true;if(s.laser||s.wave||s.orb)weaponImpact('blocked',obstruction.x,obstruction.y,s);continue}
+  const targets=[...enemies,...(boss?bosses.targets(boss):[])];
+  const contacts=targets.filter(target=>target.hp>0&&!s.hit.has(target)).map(target=>({target,point:shotHit(s,target,target.r||23)})).filter(hit=>hit.point).sort((a,b)=>a.point.distance-b.point.distance);
+  for(const {target,point} of contacts){
+   if(target.hp<=0)continue;s.hit.add(target);
+   const blocked=!!boss&&(target===boss.core||boss.parts.includes(target))&&(boss.transition>0||boss.age<1||(target===boss.core&&!boss.core.open));
+   const accepted=damageTarget(target,s);
+   if((s.laser||s.wave||s.orb)&&(accepted||blocked))weaponImpact(accepted?(s.pierce?'pierce':'hit'):'blocked',point.x,point.y,s);
+   if(s.splash&&accepted){weaponImpact('splash',point.x,point.y,s,s.splash);burst(point.x,point.y,crafts[ship.craft].color,16);for(const other of targets)if(other!==target&&other.hp>0&&Math.hypot(other.x-point.x,other.y-point.y)<s.splash)damageTarget(other,{...s,damage:s.damage*.65})}
    if(boss&&boss.hp<=0){burst(boss.x,boss.y,'#ffac70',100);clearStage();return}
-   if(!s.pierce){s.dead=true;break}
+   if(!s.pierce||blocked){s.dead=true;break}
   }
+  if(obstruction&&!s.dead){s.dead=true;weaponImpact('blocked',obstruction.x,obstruction.y,s)}
  }
 }
 function update(dt){
  if(state!=='playing')return;
+ weaponFx=weapons.updateEffects(weaponFx,dt);
  t+=dt;ship.inv-=dt;fire-=dt;spawn-=dt;noticeTime-=dt;if(noticeTime<0)$('#notice').textContent='';
  if(ship.shieldTime>0){ship.shieldTime=Math.max(0,ship.shieldTime-dt);if(ship.shieldTime===0)ship.up[4]=0;hud()}
  let dx=(keys.has('ArrowRight')||keys.has('KeyD')?1:0)-(keys.has('ArrowLeft')||keys.has('KeyA')?1:0)+touchMove.x,dy=(keys.has('ArrowDown')||keys.has('KeyS')?1:0)-(keys.has('ArrowUp')||keys.has('KeyW')?1:0)+touchMove.y;
@@ -258,10 +277,11 @@ if(ship){for(let i=0;i<ship.up[3];i++){const p=optionPosition(i);ctx.fillStyle=c
 
 for(const e of enemies)if(e.hp>0)foes.draw(ctx,e,theme.color,time);
 if(boss){bosses.draw(ctx,boss);ctx.fillStyle='#223842';ctx.fillRect(350,22,500,5);ctx.fillStyle=theme.color;ctx.fillRect(350,22,500*Math.max(0,Math.min(1,boss.hp/boss.max)),5)}
-ctx.shadowBlur=10;for(const s of shots){ctx.fillStyle=s.missile?'#f0c275':crafts[ship.craft].color;ctx.shadowColor=ctx.fillStyle;if(s.orb||s.wave){ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill()}else{ctx.save();ctx.translate(s.x,s.y);ctx.rotate(Math.atan2(s.vy,s.vx));ctx.fillRect(s.laser?-48:-12,-2,s.laser?52:s.missile?13:22,s.laser?4:3);ctx.restore()}}
+ctx.shadowBlur=0;for(const s of shots)if(!s.dead)weapons.drawShot(ctx,s);weapons.drawEffects(ctx,weaponFx);
 for(const b of bullets){ctx.shadowBlur=0;ctx.fillStyle='#f64e79';ctx.strokeStyle='#fff1df';ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(b.x,b.y,b.r+1,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#fff6ec';ctx.beginPath();ctx.arc(b.x,b.y,1.7,0,Math.PI*2);ctx.fill()}
 for(const c of caps){ctx.save();ctx.translate(c.x,c.y);ctx.shadowBlur=12;ctx.shadowColor='#69dbff';polygon([[-13,0],[-7,-12],[7,-12],[13,0],[7,12],[-7,12]],'#67d9ff');ctx.shadowBlur=0;ctx.strokeStyle='#effbff';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#102b42';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillText('P',0,5);ctx.restore()}ctx.shadowBlur=0;
 for(const p of particles){if(state!=='paused'){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt}ctx.globalAlpha=Math.max(0,Math.min(1,p.life*2));ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,3,3)}ctx.globalAlpha=1;particles=particles.filter(p=>p.life>0);
+if(configurable())weapons.preview(previewCtx,loadout.craft,time);
 }
 function frame(ms){const dt=Math.min((ms-last)/1000,.033);last=ms;if(state==='playing')update(dt);draw(dt,ms/1000);requestAnimationFrame(frame)}
 $('#start').onclick=()=>{launch();$('#start').blur()};$('#pause').onclick=()=>{pause();$('#pause').blur()};$('#equip').onclick=()=>{equip();$('#equip').blur()};$('#touchpower').onclick=()=>{equip();$('#touchpower').blur()};$('#sound').onclick=()=>{sound=!sound;$('#sound').textContent=sound?'SOUND ON':'SOUND OFF';beep();$('#sound').blur()};
