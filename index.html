@@ -32,7 +32,7 @@
   <div class="hud"><div><small>SCORE</small><strong id="score">000000</strong></div><div><small>BEST</small><strong id="best">000000</strong></div><div class="sector"><small id="sector">STAGE 1 / 5</small><span id="progress">BLUE FRONTIER</span></div><div><small>HULL</small><strong id="lives">◆ ◆ ◆</strong></div></div>
   <div class="screen"><canvas id="game" width="1200" height="560" aria-label="横スクロール宇宙シューティング"></canvas><div class="scanlines"></div><div id="overlay"><p id="overline">INTERCEPTOR / O-01</p><h2 id="title">ORBITAL</h2><p id="message">5つの宙域を突破せよ。出撃準備はいいか。</p><button id="start">出撃する <span>↗</span></button><small>ENTER TO LAUNCH</small></div><button id="pause" aria-label="一時停止">Ⅱ</button><div id="notice"></div></div>
   <div class="power"><div class="power-label">POWER UP <small>赤いカプセル → Xで装備</small></div><div id="upgrades" aria-label="パワーアップゲージ"><span>SPEED</span><span>MISSILE</span><span>DOUBLE</span><span>LASER</span><span>OPTION</span><span>SHIELD</span></div><button id="equip">装備 <kbd>X</kbd></button></div>
-  <div class="armament-status"><span>武器は最大 Lv.2 <i>/</i> OPTION 最大4機</span><span id="defense-status" aria-live="polite">GUARD / 未装備</span></div>
+  <div class="armament-status"><span id="route-status">蒼の宙域 / 開けた航路</span><span id="defense-status" aria-live="polite">GUARD / 未装備</span></div>
  </section>
  <div class="below"><div><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> / WASD <span>移動</span><kbd>SPACE</kbd> <span>ショット</span><kbd>X</kbd> <span>強化</span><kbd>P</kbd> <span>一時停止</span></div><label><input id="auto" type="checkbox" checked> AUTO FIRE</label></div>
  <div class="touch" aria-label="タッチ操作">
@@ -41,4 +41,4 @@
   <div class="touch-actions"><button id="touchpause" type="button" aria-label="一時停止">Ⅱ <span>一時停止</span></button><button id="touchfire" type="button">FIRE <span>ショット</span></button><button id="touchpower" type="button">POWER UP <span>装備</span></button></div>
  </div>
  <footer><span>ONE SHIP. AN ENTIRE FRONTIER.</span><span>オリジナル・アーケードシューティング / 2026</span></footer>
-</main><script src="game.js"></script></body></html>
+</main><script src="world.js?v=20261014"></script><script src="enemies.js?v=20261014"></script><script src="game.js?v=20261014"></script></body></html>

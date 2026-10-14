@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.log
 orbital-*.png
+browser-preview.cjs
 playwright-report/
 test-results/
 .env

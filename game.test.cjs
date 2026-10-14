@@ -1,13 +1,16 @@
 const { readFileSync } = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
+const OrbitalWorld = require('./world.js');
+const OrbitalEnemies = require('./enemies.js');
+const { safeRoute } = require('./world.test.cjs');
 
 // Instrument a test-only copy; production exposes no debug controls.
 const production = readFileSync(__dirname + '/game.js', 'utf8');
 assert.match(production, /\}\)\(\);\s*$/);
 const source = production.replace(/\}\)\(\);\s*$/, `
-this.test={reset,launch,pause,update,hit,bossVolley,equip,shoot,updateShots,terrainY,
- read:()=>({state,stageIndex,t,score,life,selection,ship,boss,bullets,enemies,shots,caps,loadout}),
+this.test={reset,launch,pause,update,hit,bossVolley,equip,shoot,updateShots,terrainY,draw,startStage,damageTarget,
+ read:()=>({state,stageIndex,t,score,life,selection,ship,boss,bullets,enemies,shots,caps,particles,loadout,enemyWave,routePhase}),
  quiet:()=>{spawn=999;fire=999;shots=[];enemies=[];bullets=[];caps=[];},
  collect:()=>{caps.push({x:ship.x,y:ship.y});update(0);},
  selectUpgrade:i=>{selection=ship.gauge.indexOf(i);},
@@ -17,6 +20,7 @@ this.test={reset,launch,pause,update,hit,bossVolley,equip,shoot,updateShots,terr
  reachBoss:()=>{t=stages[stageIndex].duration;spawn=999;},
  killBoss:()=>{boss.hp=1;shots=[{x:boss.x,y:boss.y,vx:0,vy:0,damage:2,age:0,hit:new Set()}];},
  campaignEquipment:()=>{ship.up=[2,2,2,4,3,2];ship.weapon=2;selection=3;life=2;},
+ resumeSpawning:()=>{spawn=0;fire=0;},
  vulnerable:()=>{ship.inv=0;ship.up[4]=0;ship.shieldTime=0;}
 };})();`);
 
@@ -56,7 +60,16 @@ function element() {
       if (captured.delete(id)) this.dispatch('lostpointercapture', { pointerId: id });
     },
     blur() { this.blurred = true; },
-    getContext() { return {}; },
+    getContext() {
+      const gradient = { addColorStop() {} }, noop = () => {};
+      return new Proxy({ globalAlpha: 1 }, {
+        get(target, property) {
+          if (property in target) return target[property];
+          return target[property] = ['createLinearGradient', 'createRadialGradient'].includes(property)
+            ? () => gradient : noop;
+        },
+      });
+    },
   };
 }
 
@@ -79,7 +92,7 @@ function fixture(craft = 'vector', defense = 'guard') {
     document,
     window: { addEventListener(type, fn) { winListeners.set(type, fn); } },
     localStorage: { getItem() { return '0'; }, setItem() {} },
-    requestAnimationFrame() {}, Math, console,
+    requestAnimationFrame() {}, Math, console, OrbitalWorld, OrbitalEnemies,
   });
   vm.runInContext(source, context);
   const g = context.test;
@@ -436,6 +449,85 @@ test('focus mode toggles presentation and ARIA state, while clearing active touc
     assert.equal(button.textContent, active ? '通常表示' : 'ゲームを大きく');
     assert.equal(button.blurred, true); assertTouchStopped(f);
   }
+});
+
+test('new enemy telegraphs and route state freeze on pause and reset between stages', () => {
+  const { g, start } = fixture(); start(); g.startStage(3); g.quiet();
+  const charger = OrbitalEnemies.create('charger', 1000, 180, 3);
+  const carrier = OrbitalEnemies.create('carrier', 800, 280, 3);
+  g.read().enemies.push(charger, carrier); g.update(.1);
+  assert.equal(charger.mode, 'telegraph');
+  g.pause(); const snapshot = plain(g.read()); g.update(10); g.draw(10, 10);
+  assert.deepEqual(plain(g.read()), snapshot, 'all new timers and particles freeze while paused');
+  g.pause(); g.reachBoss(); g.update(0); g.killBoss(); g.update(0);
+  assert.equal(g.read().state, 'stageclear'); g.launch();
+  assert.equal(g.read().stageIndex, 4); assert.equal(g.read().enemyWave, 0); assert.equal(g.read().routePhase, '');
+  for (const field of ['enemies', 'shots', 'bullets', 'caps', 'particles']) assert.equal(g.read()[field].length, 0);
+  g.update(.01); assert.ok(g.read().enemyWave > 0); g.reset();
+  assert.equal(g.read().stageIndex, 0); assert.equal(g.read().enemyWave, 0);
+  assert.equal(g.read().routePhase, ''); assert.equal(g.read().enemies.length, 0);
+});
+
+test('integrated armor damage grants enemy score and capsule exactly once', () => {
+  const { g, start } = fixture(); start(); const enemy = OrbitalEnemies.create('armored', 600, 280, 0, { drop: true });
+  g.read().enemies.push(enemy); const hp = enemy.hp;
+  g.damageTarget(enemy, { damage: 1, x: 550, vx: 650 }); assert.equal(enemy.hp, hp - .3);
+  g.damageTarget(enemy, { damage: 1, laser: true }); assert.equal(enemy.hp, hp - 1.3);
+  enemy.hp = .1; g.damageTarget(enemy, { damage: 1, missile: true });
+  assert.equal(g.read().score, 300); assert.equal(g.read().caps.length, 1);
+  g.damageTarget(enemy, { damage: 1, laser: true });
+  assert.equal(g.read().score, 300); assert.equal(g.read().caps.length, 1);
+});
+
+test('a player laser inside the ceiling cannot damage an enemy through terrain', () => {
+  const { g, start, equip, fire } = fixture(); start(); equip(2); equip(2);
+  const laser = fire()[0]; laser.y = OrbitalWorld.bounds(0, laser.x, 0).top - 1;
+  const target = g.target(laser.x, laser.y); g.updateShots(0);
+  assert.equal(laser.dead, true); assert.equal(target.hp, 20);
+});
+
+test('headless full-length campaign follows a safe route without invalid or runaway entities', () => {
+  const { g, start, elements } = fixture('prism', 'core'); start();
+  const seenKinds = new Set(), maxima = { enemies: 0, bullets: 0, shots: 0, caps: 0, particles: 0 };
+  const limits = { enemies: 24, bullets: 220, shots: 350, caps: 80, particles: 600 };
+  elements.get('#auto').checked = true;
+  for (let stage = 0; stage < 5; stage++) {
+    g.startStage(stage); g.campaignEquipment(); g.read().ship.up[0] = 0; g.resumeSpawning();
+    const route = safeRoute(stage), duration = OrbitalWorld.durations[stage], frames = (duration + 12) * 60;
+    for (let frame = 0; frame < frames; frame++) {
+      const before = g.read(), nextTime = before.t + 1 / 60;
+      const routeIndex = Math.min(route.length - 1, Math.floor(nextTime * 10));
+      const nextIndex = Math.min(route.length - 1, routeIndex + 1), fraction = nextTime * 10 - routeIndex;
+      const y = route[routeIndex] + (route[nextIndex] - route[routeIndex]) * fraction;
+      before.ship.x = 170; before.ship.y = y; before.ship.inv = 1000;
+      if (before.boss) before.boss.hp = 1e6;
+      assert.equal(OrbitalWorld.collides(stage, 170, y, 15, nextTime, false).hit, false);
+      g.update(1 / 60);
+      // Physics runs at60Hz; a20Hz no-op canvas still exercises every render path and particle cleanup.
+      if (frame % 3 === 2) g.draw(3 / 60, nextTime);
+      const current = g.read();
+      assert.equal(current.state, 'playing'); assert.ok(Number.isFinite(current.ship.x) && Number.isFinite(current.ship.y));
+      assert.ok(Math.abs(current.ship.y - y) < 1e-7,
+        `stage ${stage + 1}: route recovery at ${nextTime}s (actual t=${current.t}, y=${y} -> ${current.ship.y})`);
+      if (current.boss) assert.ok(Number.isFinite(current.boss.x) && Number.isFinite(current.boss.y));
+      for (const [field, limit] of Object.entries(limits)) {
+        maxima[field] = Math.max(maxima[field], current[field].length);
+        assert.ok(current[field].length <= limit, `stage ${stage + 1}: runaway ${field} (${current[field].length}) at ${nextTime}s`);
+        for (const entity of current[field]) {
+          assert.ok(Number.isFinite(entity.x) && Number.isFinite(entity.y), `${field}: invalid coordinate`);
+          for (const key of ['vx', 'vy', 'hp', 'age', 'r']) if (key in entity) assert.ok(Number.isFinite(entity[key]), `${field}: invalid ${key}`);
+          if (field === 'enemies') {
+            seenKinds.add(entity.kind); const b = OrbitalWorld.bounds(stage, entity.x, current.t);
+            assert.ok(entity.y >= b.top - .001 && entity.y <= b.bottom + .001, 'enemy center escaped the passage');
+          }
+        }
+      }
+    }
+    assert.ok(g.read().boss, 'every complete stage must reach its boss');
+    g.killBoss(); g.update(0); assert.equal(g.read().state, stage === 4 ? 'won' : 'stageclear');
+  }
+  assert.equal(seenKinds.size, 8, 'the simulation must exercise every enemy role');
+  console.log('  Campaign maxima: ' + JSON.stringify(maxima));
 });
 
 console.log('All ORBITAL system, campaign and mobile control checks passed.');
