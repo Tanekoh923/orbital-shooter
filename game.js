@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d'),$=s=>document.querySelector(s),W=1200,H=560;
-const world=OrbitalWorld,foes=OrbitalEnemies;
+const world=OrbitalWorld,foes=OrbitalEnemies,encounters=OrbitalEncounters,bosses=OrbitalBosses,records=OrbitalRecords;
 const keys=new Set(),names=['SPEED','MISSILE','LASER','OPTION','SHIELD','DOUBLE'];
 const crafts={
  vector:{name:'VECTOR',color:'#80f9e4',description:'直進レーザー / 斜め上ダブル / 下向きミサイル。前方への集中攻撃。'},
@@ -11,18 +11,36 @@ const crafts={
 };
 const defenses={guard:{name:'GUARD',capacity:3},front:{name:'SHIELD',capacity:12},limit:{name:'LIMIT',capacity:1},core:{name:'FORCE FIELD',capacity:3}};
 const defaultGauge=[0,1,5,2,3,4];
-let loadout={craft:'vector',defense:'guard',gauge:[...defaultGauge]};
+let storage;try{storage=localStorage}catch{}
+let saveAvailable=!!storage;
+let progress=records.read(storage),loadout={craft:progress.settings.craft,defense:progress.settings.defense,gauge:[...progress.settings.gauge]};
+const difficultyProfiles={easy:{name:'EASY',hull:4,bulletSpeed:.78,hitRadius:12,collectRadius:42,waveDelay:1.18},normal:{name:'NORMAL',hull:3,bulletSpeed:1,hitRadius:15,collectRadius:32,waveDelay:1},hard:{name:'HARD',hull:3,bulletSpeed:1.17,hitRadius:15,collectRadius:30,waveDelay:.88}};
+let mission={mode:'campaign',difficulty:progress.settings.difficulty,ranked:true};
+function rules(){return difficultyProfiles[mission.difficulty]||difficultyProfiles.normal}
+function persist(){saveAvailable=records.save(storage,progress);return saveAvailable}
+function saveSettings(){progress.settings=records.settings({...loadout,difficulty:$('#difficulty-select').value,mode:$('#mode-select').value,stage:Number($('#practice-stage').value)});persist()}
+function renderMission(){
+ const mode=['stage','boss'].includes($('#mode-select').value)?$('#mode-select').value:'campaign',difficulty=difficultyProfiles[$('#difficulty-select').value]?$('#difficulty-select').value:'normal';
+ const cap=mode==='boss'?progress.unlockedBoss:progress.unlockedStage,select=$('#practice-stage');
+ for(const option of Array.from(select.options||[]))option.disabled=Number(option.value)>cap;
+ select.disabled=!configurable()||mode==='campaign';select.value=String(Math.max(0,Math.min(cap,Number(select.value)||0)));
+ $('#mission-help').textContent=mode==='campaign'?'全5ステージに挑戦。途中再開は参考スコアです。':'練習は記録に含まれません。解放済みの面を標準装備で練習できます。';
+ $('#records').textContent=difficultyProfiles[difficulty].name+' BEST '+String(progress.records[difficulty]).padStart(6,'0')+' / 練習開放：1〜'+(cap+1)+'面'+(saveAvailable?'':' / このタブ内のみ保存');
+ const canResume=!!progress.checkpoint&&configurable();$('#continue').classList.toggle('hidden',!canResume);
+ if(canResume)$('#continue').textContent='第'+(progress.checkpoint.stage+1)+'面の開始地点から再開（参考スコア）';
+ if(configurable())best=progress.records[difficulty];
+}
 function configurable(){return ['ready','over','won'].includes(state)}
 function configure(){
  if(!configurable())return;
  const craft=$('#craft-select').value,defense=$('#defense-select').value;
  if(crafts[craft])loadout.craft=craft;if(defenses[defense])loadout.defense=defense;
- renderLoadout();hud();
+ saveSettings();renderLoadout();hud();
 }
 function swapGauge(slot,value){
  if(!configurable()||!Number.isInteger(slot)||slot<0||slot>=6)return;
  const other=loadout.gauge.indexOf(value);if(other<0)return;
- [loadout.gauge[slot],loadout.gauge[other]]=[loadout.gauge[other],loadout.gauge[slot]];renderLoadout();hud();
+ [loadout.gauge[slot],loadout.gauge[other]]=[loadout.gauge[other],loadout.gauge[slot]];saveSettings();renderLoadout();hud();
 }
 function renderLoadout(){
  $('#loadout-fieldset').disabled=!configurable();
@@ -30,9 +48,10 @@ function renderLoadout(){
  document.querySelectorAll('[data-gauge-slot]').forEach(el=>{el.value=String(loadout.gauge[Number(el.dataset.gaugeSlot)])});
  $('#craft-detail').textContent=crafts[loadout.craft].description;
  $('#loadout-summary').textContent=crafts[loadout.craft].name+' / '+defenses[loadout.defense].name+(configurable()?' / 出撃前に変更できます':' / 任務中は設定固定');
+ renderMission();
 }
 function optionPosition(index){
- const p=trail[Math.min(trail.length-1,(index+1)*12)]||ship;
+ const target=t-(index+1)*.2,p=trail.find(point=>point.time<=target)||trail[trail.length-1]||ship;
  return {x:Math.max(16,p.x-34*(index+1)),y:p.y};
 }
 const stages=[
@@ -46,29 +65,29 @@ let stageIndex=0;
 function startStage(index){
  stageIndex=index;t=0;shots=[];enemies=[];bullets=[];caps=[];trail=[];particles=[];boss=null;spawn=0;enemyWave=0;routePhase='';fire=0;clearTouch();keys.clear();
  ship.x=170;ship.y=280;ship.inv=2;state='playing';
- const stage=stages[index];$('#overlay').classList.add('hidden');$('#sector').textContent=`STAGE ${index+1} / ${stages.length}`;$('#progress').textContent=stage.name;$('#pause').textContent='Ⅱ';
- document.documentElement.style.setProperty('--cyan',stage.color);notify(`STAGE ${index+1} / ${stage.jp}`);syncPause();renderLoadout();hud();
+ $('#retry').classList.add('hidden');$('#boss-status').textContent='';
+ const stage=stages[index];$('#overlay').classList.add('hidden');$('#sector').textContent=`${mission.mode==='campaign'?(mission.ranked?'STAGE':'CONTINUE'):'PRACTICE'} ${index+1} / ${stages.length} · ${rules().name}`;$('#progress').textContent=stage.name;$('#pause').textContent='Ⅱ';
+ document.documentElement.style.setProperty('--cyan',stage.color);notify(`${mission.mode==='campaign'?'STAGE':'PRACTICE'} ${index+1} / ${stage.jp}`);syncPause();renderLoadout();hud();
+ if(mission.mode==='campaign'){progress.checkpoint=records.checkpoint({stage:index,difficulty:mission.difficulty,score,selection,ship});persist()}
+ if(mission.mode==='boss'){t=stage.duration;ensureBoss()}
+}
+function ensureBoss(){
+ if(boss)return;boss=bosses.create(stageIndex,mission.difficulty);notify('WARNING / '+stages[stageIndex].boss);$('#progress').textContent=stages[stageIndex].boss;
+ if(mission.mode==='campaign'){progress.unlockedBoss=Math.max(progress.unlockedBoss,stageIndex);persist()}
 }
 function clearStage(){
  score+=5000*(stageIndex+1);boss=null;shots=[];enemies=[];bullets=[];caps=[];keys.clear();clearTouch();
+ $('#boss-status').textContent='';
+ if(mission.mode!=='campaign'){finish(true);return}
+ progress.unlockedStage=Math.max(progress.unlockedStage,Math.min(4,stageIndex+1));progress.unlockedBoss=Math.max(progress.unlockedBoss,progress.unlockedStage);persist();
  if(stageIndex===stages.length-1){finish(true);return}
- state='stageclear';life=Math.min(3,life+1);hud();
+ state='stageclear';life=Math.min(rules().hull,life+1);hud();
  $('#overline').textContent=`STAGE ${stageIndex+1} / ${stages.length} COMPLETE`;$('#title').textContent='STAGE CLEAR';
  $('#message').textContent=`次の宙域：${stages[stageIndex+1].jp} / 耐久1回復・装備を引き継ぎ`;
  $('#start').innerHTML='次のステージへ <span>↗</span>';$('#overlay').classList.remove('hidden');beep(880,.3,'sine');
 }
 function launch(){if(state==='stageclear')startStage(stageIndex+1);else reset()}
-function enemyBullet(x,y,angle,speed=190,r=5){bullets.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,r})}
-function bossVolley(){
- const a=Math.atan2(ship.y-boss.y,ship.x-boss.x),speed=210+stageIndex*15,x=boss.x-75,y=boss.y;
- switch(stages[stageIndex].pattern){
- case 'fan':for(let i=-2;i<=2;i++)enemyBullet(x,y,a+i*.2,speed,7);break;
- case 'aim':for(const offset of [-55,0,55])enemyBullet(x,y+offset,Math.atan2(ship.y-y-offset,ship.x-x),speed+35,6);break;
- case 'spiral':for(let i=0;i<10;i++)enemyBullet(x,y,boss.age*1.4+i*Math.PI/5,speed,6);break;
- case 'wall':{const gap=70+(Math.floor(boss.age/2)%5)*90;for(let row=40;row<H;row+=45)if(Math.abs(row-gap)>55)enemyBullet(x,row,Math.PI,speed,6);break;}
- case 'final':for(let i=-3;i<=3;i++)enemyBullet(x,y,a+i*.17,speed,7);if(boss.volley%3===0)for(let i=0;i<12;i++)enemyBullet(x,y,boss.age+i*Math.PI/6,180,5);break;
- }boss.volley++;
-}
+function enemyBullet(x,y,angle,speed=190,r=5){const velocity=speed*rules().bulletSpeed;bullets.push({x,y,vx:Math.cos(angle)*velocity,vy:Math.sin(angle)*velocity,r})}
 let state='ready',t=0,last=0,score=0,best=0,life=3,selection=-1,ship,shots=[],enemies=[],bullets=[],caps=[],particles=[],trail=[],boss=null,spawn=0,enemyWave=0,routePhase='',fire=0,noticeTime=0,sound=false,audio=null,pointer=null;
 const touchMove={x:0,y:0,id:null};
 let dragPointer=null,firePointer=null;
@@ -81,18 +100,29 @@ function syncPause(){
  const paused=state==='paused';$('#pause').textContent=paused?'▶':'Ⅱ';$('#pause').setAttribute('aria-label',paused?'再開':'一時停止');
  $('#touchpause').textContent=paused?'再開':'一時停止';$('#touchpause').setAttribute('aria-label',paused?'再開':'一時停止');
 }
-try{best=Number(localStorage.getItem('orbital-best'))||0}catch{}
+best=progress.records[mission.difficulty];
 const stars=Array.from({length:150},()=>({x:Math.random()*W,y:Math.random()*H,z:.2+Math.random(),r:Math.random()*1.5}));
 function beep(f=440,d=.06,type='square',volume=.025){if(!sound)return;try{audio??=new(window.AudioContext||window.webkitAudioContext)();audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(f,audio.currentTime);o.frequency.exponentialRampToValueAtTime(f/2,audio.currentTime+d);g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+d);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+d)}catch{}}
 function hud(){
- $('#score').textContent=String(score).padStart(6,'0');$('#best').textContent=String(best).padStart(6,'0');$('#lives').textContent='◆ '.repeat(life)+'◇ '.repeat(3-life);
+ $('#score').textContent=String(score).padStart(6,'0');$('#best').textContent=String(best).padStart(6,'0');$('#lives').textContent='◆ '.repeat(Math.max(0,life))+'◇ '.repeat(Math.max(0,rules().hull-life));
  const order=ship&&!configurable()?ship.gauge:loadout.gauge;
  [...$('#upgrades').children].forEach((el,slot)=>{const i=order[slot],level=configurable()?0:(ship?.up[i]||0),active=level>0&&(i===2||i===5?ship?.weapon===i:true);
   el.textContent=names[i]+(level?' '+(i===1||i===2||i===5?'Lv.':'')+level:'');el.classList.toggle('selected',!configurable()&&selection===slot);el.classList.toggle('owned',level>0);el.classList.toggle('active-weapon',active);el.title=(i===2||i===5)&&level&&!active?'レベル保持・現在は未選択':names[i];
  });
  $('#defense-status').textContent=!ship||configurable()?'未装備':ship.up[4]?(defenses[ship.defense].name+' / '+(ship.defense==='limit'?Math.max(0,ship.shieldTime).toFixed(1)+'s':ship.up[4])):'SHIELD OFF';
 }
-function reset(){score=0;life=3;selection=-1;ship={x:170,y:280,up:[0,0,0,0,0,0],inv:2,craft:loadout.craft,defense:loadout.defense,gauge:[...loadout.gauge],weapon:null,shieldTime:0};startStage(0);beep(660,.15)}
+function reset(){
+ saveSettings();const config=progress.settings;mission={mode:config.mode,difficulty:config.difficulty,ranked:config.mode==='campaign'};score=0;life=rules().hull;selection=-1;best=progress.records[mission.difficulty];
+ ship={x:170,y:280,up:[0,0,0,0,0,0],inv:2,craft:loadout.craft,defense:loadout.defense,gauge:[...loadout.gauge],weapon:null,shieldTime:0};
+ if(mission.mode!=='campaign'){ship.up=[1,1,mission.mode==='boss'?2:1,mission.mode==='boss'?2:1,defenses[ship.defense].capacity,1];ship.weapon=2;if(ship.defense==='limit')ship.shieldTime=3}
+ const cap=mission.mode==='boss'?progress.unlockedBoss:progress.unlockedStage;startStage(mission.mode==='campaign'?0:Math.min(cap,config.stage));beep(660,.15);
+}
+function resumeCheckpoint(){
+ if(!configurable())return;const saved=records.checkpoint(progress.checkpoint);if(!saved)return;
+ mission={mode:'campaign',difficulty:saved.difficulty,ranked:false};score=saved.score;selection=saved.selection;life=rules().hull;best=progress.records[mission.difficulty];
+ loadout={craft:saved.ship.craft,defense:saved.ship.defense,gauge:[...saved.ship.gauge]};ship={...saved.ship,up:[...saved.ship.up],gauge:[...saved.ship.gauge],x:170,y:280,inv:2};
+ $('#mode-select').value='campaign';$('#difficulty-select').value=mission.difficulty;startStage(saved.stage);
+}
 function notify(msg){$('#notice').textContent=msg;noticeTime=2.5}
 function equip(){
  if(state!=='playing'||selection<0)return;const i=ship.gauge[selection],max=i===0?3:i===3?4:i===4?defenses[ship.defense].capacity:2;
@@ -102,7 +132,16 @@ function equip(){
  selection=-1;notify(names[i]+' EQUIPPED');beep(1000,.2,'sine');hud();
 }
 function burst(x,y,color,count=20){const limit=Math.min(count,Math.max(0,600-particles.length));for(let i=0;i<limit;i++){const a=Math.random()*Math.PI*2,s=30+Math.random()*170;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.3+Math.random()*.5,color})}}
-function finish(win){state=win?'won':'over';clearTouch();keys.clear();best=Math.max(score,best);try{localStorage.setItem('orbital-best',best)}catch{}renderLoadout();hud();$('#overline').textContent=win?'ALL 5 STAGES COMPLETE':'SIGNAL LOST';$('#title').textContent=win?'ALL CLEAR':'GAME OVER';$('#message').textContent=(win?'全5宙域の解放を確認。任務完了。':'もう一度、この宙域に挑め。')+' SCORE '+String(score).padStart(6,'0');$('#start').innerHTML='もう一度出撃 <span>↗</span>';$('#overlay').classList.remove('hidden')}
+function finish(win){
+ state=win?'won':'over';clearTouch();keys.clear();const practice=mission.mode!=='campaign';
+ if(!practice&&mission.ranked){best=Math.max(score,best);progress.records[mission.difficulty]=best;if(mission.difficulty==='normal')try{storage.setItem('orbital-best',String(best))}catch{}}
+ if(win&&!practice)progress.checkpoint=null;persist();renderLoadout();hud();
+ $('#overline').textContent=practice?'PRACTICE / 記録対象外':mission.ranked?rules().name:'CONTINUE / 参考スコア';
+ $('#title').textContent=win?(practice?'PRACTICE CLEAR':'ALL CLEAR'):'GAME OVER';
+ $('#message').textContent=(win?'任務完了。':'装備を整えて、もう一度。')+' SCORE '+String(score).padStart(6,'0');
+ $('#start').innerHTML=(practice?'同じ練習をやり直す':'最初から出撃')+' <span>↗</span>';
+ $('#retry').classList.toggle('hidden',win||practice||!progress.checkpoint);$('#overlay').classList.remove('hidden');
+}
 function hit(source={x:ship.x,y:ship.y},terrain=false){
  if(state!=='playing'||ship.inv>0||(ship.defense==='limit'&&ship.shieldTime>0))return;
  const guarded=ship.up[4]>0&&((ship.defense==='guard'&&(terrain||Math.abs(source.y-ship.y)>Math.abs(source.x-ship.x)))||(!terrain&&(ship.defense==='core'||(ship.defense==='front'&&source.x>ship.x))));
@@ -111,7 +150,7 @@ function hit(source={x:ship.x,y:ship.y},terrain=false){
 }
 function pause(){if(!['playing','paused'].includes(state))return;state=state==='playing'?'paused':'playing';keys.clear();clearTouch();syncPause();notify(state==='paused'?'PAUSED / 再開ボタンで続行':'');}
 function shoot(x,y,option=false){
- const type=ship.craft,mode=ship.weapon,level=mode===null?0:ship.up[mode],strength=option ? .65 : 1;
+ const type=ship.craft,mode=ship.weapon,level=mode===null?0:ship.up[mode],strength=option ? .5 : 1;
  const add=(vx,vy,extra={})=>shots.push({x:x+24,y,baseY:y,vx,vy,age:0,damage:strength,hit:new Set(),...extra});
  if(mode===2){
   if(type==='vector')add(760,0,{laser:true,pierce:level===2,damage:(level===2?2.1:1.6)*strength});
@@ -133,7 +172,7 @@ function shoot(x,y,option=false){
 function terrainY(x,layer=1){return world.bounds(stageIndex,x,t).bottom+(layer===0?10:0)}
 function routeBounds(x){return world.bounds(stageIndex,x,t)}
 function resolveTerrain(){
- const collision=world.collides(stageIndex,ship.x,ship.y,15,t);
+ const collision=world.collides(stageIndex,ship.x,ship.y,rules().hitRadius,t);
  if(!collision.hit)return;
  hit(collision.source||{x:ship.x,y:ship.y<280?0:H},true);
  if(Number.isFinite(collision.safeY))ship.y=collision.safeY;
@@ -146,8 +185,11 @@ function shotHit(s,target,radius){
 }
 function damageTarget(target,s){
  if(target.hp<=0)return;
- target.hp-=s.damage*(target===boss?1:foes.damageScale(target,s));burst(target.x,target.y,'#ffbe8d',4);
- if(target!==boss&&target.hp<=0){score+=target.score||100;burst(target.x,target.y,'#ffad77');if(target.drop)caps.push({x:target.x,y:target.y});hud();beep(150,.08)}
+ const bossTarget=boss&&(target===boss.core||boss.parts.includes(target));
+ if(bossTarget){const result=bosses.damage(boss,target,s);if(!result.accepted)return;if(result.partDestroyed){score+=150;burst(target.x,target.y,'#d8edff',28);hud()}if(result.phaseChanged)bullets=[]}
+ else target.hp-=s.damage*foes.damageScale(target,s);
+ burst(target.x,target.y,'#ffbe8d',4);
+ if(!bossTarget&&target.hp<=0){score+=target.score||100;burst(target.x,target.y,'#ffad77');if(target.drop)caps.push({x:target.x,y:target.y});hud();beep(150,.08)}
 }
 function updateShots(dt){
  for(const s of shots){
@@ -157,10 +199,10 @@ function updateShots(dt){
   if(s.bounce&&(s.y<34||s.y>H-40)){s.y=Math.max(34,Math.min(H-40,s.y));s.vy*=-1}
   if(s.ground&&(s.grounded||s.y>terrainY(s.x)-8)){s.grounded=true;s.y=terrainY(s.x)-8;s.vy=0;s.vx=410}
   if(world.collides(stageIndex,s.x,s.y,s.ground?2:(s.r||2),t,false).hit){s.dead=true;continue}
-  for(const target of [...enemies,...(boss?[boss]:[])]){
-   if(target.hp<=0||s.hit.has(target)||!shotHit(s,target,target===boss?76:(target.r||23)))continue;
+  for(const target of [...enemies,...(boss?bosses.targets(boss):[])]){
+   if(target.hp<=0||s.hit.has(target)||!shotHit(s,target,target.r||23))continue;
    s.hit.add(target);damageTarget(target,s);
-   if(s.splash){burst(s.x,s.y,crafts[ship.craft].color,16);for(const other of [...enemies,...(boss?[boss]:[])])if(other!==target&&other.hp>0&&Math.hypot(other.x-s.x,other.y-s.y)<s.splash)damageTarget(other,{...s,damage:s.damage*.65})}
+   if(s.splash){burst(s.x,s.y,crafts[ship.craft].color,16);for(const other of [...enemies,...(boss?bosses.targets(boss):[])])if(other!==target&&other.hp>0&&Math.hypot(other.x-s.x,other.y-s.y)<s.splash)damageTarget(other,{...s,damage:s.damage*.65})}
    if(boss&&boss.hp<=0){burst(boss.x,boss.y,'#ffac70',100);clearStage();return}
    if(!s.pierce){s.dead=true;break}
   }
@@ -174,66 +216,28 @@ function update(dt){
  if(pointer){dx=Math.max(-1,Math.min(1,(pointer.x-ship.x)/20));dy=Math.max(-1,Math.min(1,(pointer.y-ship.y)/20))}
  const speed=260+ship.up[0]*65,mag=Math.max(1,Math.hypot(dx,dy));ship.x=Math.max(30,Math.min(W-35,ship.x+dx/mag*speed*dt));ship.y=Math.max(42,Math.min(H-42,ship.y+dy/mag*speed*dt));
  resolveTerrain();if(state!=='playing')return;
- trail.unshift({x:ship.x,y:ship.y});if(trail.length>60)trail.pop();
+ trail.unshift({x:ship.x,y:ship.y,time:t});while(trail.length>512||(trail.length>2&&trail[trail.length-2].time<t-1.1))trail.pop();
  if(fire<=0&&($('#auto').checked||keys.has('Space')||keys.has('KeyZ')||keys.has('TouchFire'))){shoot(ship.x,ship.y);for(let i=0;i<ship.up[3];i++){const p=optionPosition(i);shoot(p.x,p.y,true)}fire=.16;beep(680,.035,'triangle',.012)}
  const stage=stages[stageIndex];
  const phase=world.describe(stageIndex,t);$('#route-status').textContent=phase;
  if(phase!==routePhase){if(t>=5&&t<stage.duration-5)notify(phase);routePhase=phase}
- if(t<stage.duration-5&&spawn<=0){const wave=foes.spawnWave(stageIndex,enemyWave++,t,routeBounds);enemies.push(...wave.slice(0,Math.max(0,24-enemies.length)));spawn=3.7-stageIndex*.22}
- if(t>=stage.duration&&!boss){boss={x:1080,y:280,hp:stage.hp,max:stage.hp,age:0,cool:1,volley:0};notify('WARNING / '+stage.boss);$('#progress').textContent=stage.boss}else if(t<stage.duration){$('#progress').textContent=stage.name+' / '+Math.max(0,Math.ceil(stage.duration-t))+'s'}
+ if(t<stage.duration-5&&spawn<=0){const event=encounters.plan(stageIndex,enemyWave++,t,routeBounds,world,mission.difficulty);enemies.push(...event.enemies.slice(0,Math.max(0,24-enemies.length)));spawn=event.nextDelay}
+ if(t>=stage.duration&&!boss)ensureBoss();else if(t<stage.duration)$('#progress').textContent=stage.name+' / '+Math.max(0,Math.ceil(stage.duration-t))+'s';
+ const pressure=encounters.pressure(stageIndex,ship.x,t,world);
  for(const e of enemies){
   if(e.hp<=0)continue;
-  foes.update(e,dt,{stage:stageIndex,time:t,ship,bounds:routeBounds,shoot:enemyBullet,spawn:child=>{if(enemies.length<24)enemies.push(child)}});
+  foes.update(e,dt,{stage:stageIndex,time:t,ship,bounds:routeBounds,shoot:enemyBullet,difficulty:mission.difficulty,encounterPressure:pressure,spawn:child=>{if(enemies.length<24)enemies.push(child)}});
   if(!e.kind){const bounds=routeBounds(e.x);e.y=Math.max(bounds.top+35,Math.min(bounds.bottom-35,e.y))}
   if(e.kind){const mounted=e.kind==='turret'||e.kind==='ceilingTurret',collision=world.collides(stageIndex,e.x,e.y,e.r||20,t,!mounted);if(collision.hit){if(mounted&&collision.source.kind!=='floor'&&collision.source.kind!=='ceiling'){e.hp=0;continue}if(!mounted&&Number.isFinite(collision.safeY))e.y=collision.safeY}}
-  if(Math.hypot(e.x-ship.x,e.y-ship.y)<15+(e.r||18)){hit(e);if(e.kind!=='carrier')e.hp=0;if(state!=='playing')return}
+  if(Math.hypot(e.x-ship.x,e.y-ship.y)<rules().hitRadius+(e.r||18)){hit(e);if(e.kind!=='carrier')e.hp=0;if(state!=='playing')return}
  }
- if(boss){updateBoss(dt);if(Math.abs(ship.x-boss.x)<90&&Math.abs(ship.y-boss.y)<95){hit(boss);if(state!=='playing')return}}
+ if(boss){const oldPhase=boss.phase;bosses.update(boss,dt,{stage:stageIndex,ship,difficulty:mission.difficulty,shoot:enemyBullet,notify});if(boss.phase!==oldPhase)bullets=[];$('#boss-status').textContent=bosses.status(boss);if(boss.transition<=0&&Math.abs(ship.x-boss.x)<90&&Math.abs(ship.y-boss.y)<95){hit(boss);if(state!=='playing')return}}
  updateShots(dt);if(state!=='playing')return;
- for(const b of bullets){b.x+=b.vx*dt;b.y+=b.vy*dt;if(world.collides(stageIndex,b.x,b.y,b.r,t,false).hit){b.x=-100;continue}if(Math.hypot(b.x-ship.x,b.y-ship.y)<15+b.r){hit(b);b.x=-100;if(state!=='playing')return}}
- for(const c of caps){c.x-=90*dt;const bounds=routeBounds(c.x);c.y=Math.max(bounds.top+28,Math.min(c.y,bounds.bottom-28));const collision=world.collides(stageIndex,c.x,c.y,12,t);if(collision.hit&&Number.isFinite(collision.safeY))c.y=collision.safeY;if(Math.hypot(c.x-ship.x,c.y-ship.y)<32){selection=(selection+1)%ship.gauge.length;c.x=-100;score+=50;beep(1200,.12,'sine');notify(names[ship.gauge[selection]]+' READY / PRESS X');hud()}}
+ for(const b of bullets){b.x+=b.vx*dt;b.y+=b.vy*dt;if(world.collides(stageIndex,b.x,b.y,b.r,t,false).hit){b.x=-100;continue}if(Math.hypot(b.x-ship.x,b.y-ship.y)<rules().hitRadius+b.r){hit(b);b.x=-100;if(state!=='playing')return}}
+ for(const c of caps){c.x-=90*dt;const bounds=routeBounds(c.x);c.y=Math.max(bounds.top+28,Math.min(c.y,bounds.bottom-28));const collision=world.collides(stageIndex,c.x,c.y,12,t);if(collision.hit&&Number.isFinite(collision.safeY))c.y=collision.safeY;if(Math.hypot(c.x-ship.x,c.y-ship.y)<rules().collectRadius){selection=(selection+1)%ship.gauge.length;c.x=-100;score+=50;beep(1200,.12,'sine');notify(names[ship.gauge[selection]]+' READY / 装備ボタンで取得');hud()}}
  enemies=enemies.filter(e=>e.x>-60&&e.hp>0);shots=shots.filter(s=>!s.dead&&s.age<5&&s.x>-80&&s.x<W+80&&s.y>-40&&s.y<H+20);bullets=bullets.filter(b=>b.x>-30&&b.x<W+40&&b.y>-30&&b.y<H+30);caps=caps.filter(c=>c.x>-30);
 }
 function polygon(points,color){ctx.fillStyle=color;ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.closePath();ctx.fill()}
-function updateBoss(dt){
- const previous=boss.age;boss.age+=dt;boss.cool-=dt;
- if(stageIndex===0){boss.x=1020+Math.sin(boss.age*.3)*35;boss.y=280+Math.sin(boss.age*.65)*100}
- if(stageIndex===1){
-  const cycle=boss.age%8,old=previous%8;
-  if(cycle>=4&&old<4)boss.lockY=ship.y;
-  boss.warning=cycle>=4&&cycle<5.2;
-  boss.x=cycle>=5.2&&cycle<6.6?1040-Math.sin((cycle-5.2)/1.4*Math.PI)*310:1040;
-  const target=cycle>=4&&cycle<6.6?(boss.lockY??280):280+Math.sin(boss.age*.8)*150;
-  boss.y+=(target-boss.y)*Math.min(1,dt*2.8);
- }
- if(stageIndex===2){boss.x=1020+Math.cos(boss.age*.7)*55;boss.y=280+Math.sin(boss.age*.7)*170}
- if(stageIndex===3){boss.x=1020;boss.y=280+Math.sin(boss.age*.4)*100}
- if(stageIndex===4){boss.x=980+Math.sin(boss.age*.55)*80;boss.y=280+Math.sin(boss.age*.95)*150}
- if(boss.cool<=0){bossVolley();boss.cool=(boss.hp<boss.max*.4?.85:1.2)-stageIndex*.035;if(stageIndex===3)boss.cool=1.5}
-}
-function drawBoss(time){
- const color=stages[stageIndex].color;
- if(boss.warning){ctx.save();ctx.strokeStyle='#ffce83';ctx.globalAlpha=.55;ctx.setLineDash([14,12]);ctx.beginPath();ctx.moveTo(680,boss.lockY);ctx.lineTo(boss.x-65,boss.lockY);ctx.stroke();ctx.setLineDash([]);ctx.restore()}
- ctx.save();ctx.translate(boss.x,boss.y);
- if(stageIndex===0){
-  polygon([[85,-42],[-28,-42],[-70,-18],[-70,18],[-28,42],[85,42]],'#425565');
-  for(const sign of [-1,1]){ctx.fillStyle='#273b49';ctx.fillRect(-35,sign*68-17,120,34);ctx.strokeStyle=color;ctx.strokeRect(-35,sign*68-17,120,34);ctx.fillStyle=color;ctx.fillRect(-40,sign*68-6,24,12)}
- }else if(stageIndex===1){
-  polygon([[-86,0],[-24,-27],[45,-78],[23,-24],[94,-38],[69,0],[94,38],[23,24],[45,78],[-24,27]],'#74442d');
-  polygon([[-72,0],[-18,-10],[65,-13],[80,0],[65,13],[-18,10]],boss.warning?'#ffe3a2':color);
- }else if(stageIndex===2){
-  ctx.save();ctx.rotate(time*.3);for(let i=0;i<6;i++){ctx.rotate(Math.PI/3);polygon([[15,-17],[73,-28],[92,0],[73,28],[15,17]],'#577f9b');polygon([[40,-7],[82,0],[40,7]],color)}ctx.restore();
- }else if(stageIndex===3){
-  polygon([[-68,-75],[68,-75],[85,-40],[85,40],[68,75],[-68,75],[-82,40],[-82,-40]],'#485b3d');
-  ctx.fillStyle='#253427';ctx.fillRect(-55,-58,110,116);ctx.strokeStyle=color;ctx.lineWidth=5;ctx.strokeRect(-63,-64,126,128);
-  for(const y of [-40,40]){ctx.fillStyle=color;ctx.fillRect(-78,y-8,34,16)}
- }else{
-  ctx.save();ctx.rotate(-time*.4);for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);polygon([[50,-12],[83,-22],[100,0],[83,22],[50,12]],'#653a58')}ctx.restore();
-  ctx.strokeStyle=color;ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,63,0,Math.PI*2);ctx.stroke();
- }
- ctx.fillStyle='#121e2a';ctx.beginPath();ctx.arc(-18,0,29,0,Math.PI*2);ctx.fill();ctx.fillStyle=color;ctx.beginPath();ctx.arc(-18,0,19+Math.sin(time*4)*2,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff3dc';ctx.beginPath();ctx.arc(-24,-5,6,0,Math.PI*2);ctx.fill();ctx.restore();
- ctx.fillStyle='#223842';ctx.fillRect(350,22,500,5);ctx.fillStyle=color;ctx.fillRect(350,22,500*Math.max(0,boss.hp/boss.max),5);
-}
 function drawShip(x,y,scale=1){
  const id=ship?.craft||loadout.craft,color=crafts[id].color;
  ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);polygon([[-23,-7],[-42-Math.random()*18,0],[-23,7]],color);
@@ -250,15 +254,18 @@ function drawDefense(time){
 function draw(dt,time){const theme=stages[stageIndex];ctx.fillStyle='#040f1c';ctx.fillRect(0,0,W,H);const glow=ctx.createRadialGradient(850,240,10,850,240,650);glow.addColorStop(0,theme.sky);glow.addColorStop(1,'#040c18');ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(855,230);ctx.rotate(-.3);ctx.strokeStyle='#54839022';ctx.lineWidth=20;ctx.beginPath();ctx.ellipse(0,0,300,90,0,0,Math.PI*2);ctx.stroke();const planet=ctx.createRadialGradient(-70,-60,10,0,0,147);planet.addColorStop(0,theme.planet);planet.addColorStop(.85,'#102835');planet.addColorStop(1,theme.color);ctx.fillStyle=planet;ctx.beginPath();ctx.arc(0,0,147,0,Math.PI*2);ctx.fill();ctx.restore();for(const s of stars){if(state!=='paused')s.x=(s.x-dt*(state==='playing'?80:15)*s.z+W)%W;ctx.fillStyle=`rgba(180,222,239,${s.z*.65})`;ctx.fillRect(s.x,s.y,s.r+1,s.r)}
 world.draw(ctx,stageIndex,t,theme);
 if(state==='ready')drawShip(230,280+Math.sin(time)*12,1.5);
-if(ship){for(let i=0;i<ship.up[3];i++){const p=optionPosition(i);ctx.fillStyle=crafts[ship.craft].color;ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=20;ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}if(ship.inv<=0||Math.floor(time*12)%2)drawShip(ship.x,ship.y);drawDefense(time)}
+if(ship){for(let i=0;i<ship.up[3];i++){const p=optionPosition(i);ctx.fillStyle=crafts[ship.craft].color;ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=20;ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}if(state==='paused'||ship.inv<=0||Math.floor(time*12)%2)drawShip(ship.x,ship.y);drawDefense(time);ctx.fillStyle='#ffffff';ctx.strokeStyle='#123346';ctx.lineWidth=1;ctx.beginPath();ctx.arc(ship.x,ship.y,3,0,Math.PI*2);ctx.fill();ctx.stroke()}
 
 for(const e of enemies)if(e.hp>0)foes.draw(ctx,e,theme.color,time);
-if(boss)drawBoss(time);
-ctx.shadowBlur=12;for(const s of shots){ctx.fillStyle=s.missile?'#ffb576':crafts[ship.craft].color;ctx.shadowColor=ctx.fillStyle;if(s.orb||s.wave){ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill()}else{ctx.save();ctx.translate(s.x,s.y);ctx.rotate(Math.atan2(s.vy,s.vx));ctx.fillRect(s.laser?-48:-12,-2,s.laser?52:s.missile?13:22,s.laser?4:3);ctx.restore()}}for(const b of bullets){ctx.fillStyle='#ffa37d';ctx.shadowColor='#ff794d';ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.fill()}for(const c of caps){ctx.save();ctx.translate(c.x,c.y);ctx.rotate(time*2);ctx.fillStyle='#ff7c69';ctx.shadowColor='#ff574f';ctx.fillRect(-10,-10,20,20);ctx.restore();ctx.fillStyle='#231a13';ctx.font='bold 12px monospace';ctx.fillText('P',c.x-4,c.y+4)}ctx.shadowBlur=0;
+if(boss){bosses.draw(ctx,boss);ctx.fillStyle='#223842';ctx.fillRect(350,22,500,5);ctx.fillStyle=theme.color;ctx.fillRect(350,22,500*Math.max(0,Math.min(1,boss.hp/boss.max)),5)}
+ctx.shadowBlur=10;for(const s of shots){ctx.fillStyle=s.missile?'#f0c275':crafts[ship.craft].color;ctx.shadowColor=ctx.fillStyle;if(s.orb||s.wave){ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill()}else{ctx.save();ctx.translate(s.x,s.y);ctx.rotate(Math.atan2(s.vy,s.vx));ctx.fillRect(s.laser?-48:-12,-2,s.laser?52:s.missile?13:22,s.laser?4:3);ctx.restore()}}
+for(const b of bullets){ctx.shadowBlur=0;ctx.fillStyle='#f64e79';ctx.strokeStyle='#fff1df';ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(b.x,b.y,b.r+1,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#fff6ec';ctx.beginPath();ctx.arc(b.x,b.y,1.7,0,Math.PI*2);ctx.fill()}
+for(const c of caps){ctx.save();ctx.translate(c.x,c.y);ctx.shadowBlur=12;ctx.shadowColor='#69dbff';polygon([[-13,0],[-7,-12],[7,-12],[13,0],[7,12],[-7,12]],'#67d9ff');ctx.shadowBlur=0;ctx.strokeStyle='#effbff';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#102b42';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.fillText('P',0,5);ctx.restore()}ctx.shadowBlur=0;
 for(const p of particles){if(state!=='paused'){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt}ctx.globalAlpha=Math.max(0,Math.min(1,p.life*2));ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,3,3)}ctx.globalAlpha=1;particles=particles.filter(p=>p.life>0);
 }
 function frame(ms){const dt=Math.min((ms-last)/1000,.033);last=ms;if(state==='playing')update(dt);draw(dt,ms/1000);requestAnimationFrame(frame)}
 $('#start').onclick=()=>{launch();$('#start').blur()};$('#pause').onclick=()=>{pause();$('#pause').blur()};$('#equip').onclick=()=>{equip();$('#equip').blur()};$('#touchpower').onclick=()=>{equip();$('#touchpower').blur()};$('#sound').onclick=()=>{sound=!sound;$('#sound').textContent=sound?'SOUND ON':'SOUND OFF';beep();$('#sound').blur()};
+$('#retry').onclick=()=>{resumeCheckpoint();$('#retry').blur()};$('#continue').onclick=()=>{resumeCheckpoint();$('#continue').blur()};
 $('#auto').addEventListener('change',()=>$('#auto').blur());
 window.addEventListener('keydown',e=>{
  if(e.target?.closest?.('select,input'))return;
@@ -294,6 +301,8 @@ $('#focus-mode').onclick=()=>{const active=document.body.classList.toggle('game-
 window.addEventListener('orientationchange',()=>{clearTouch();if(state==='playing')pause()});
 window.addEventListener('resize',clearTouch);
 $('#craft-select').addEventListener('change',configure);$('#defense-select').addEventListener('change',configure);
+for(const id of ['#mode-select','#practice-stage','#difficulty-select'])$(id).addEventListener('change',()=>{if(!configurable())return;renderMission();saveSettings();hud()});
 document.querySelectorAll('[data-gauge-slot]').forEach(el=>el.addEventListener('change',()=>swapGauge(Number(el.dataset.gaugeSlot),Number(el.value))));
+$('#mode-select').value=progress.settings.mode;$('#practice-stage').value=String(progress.settings.stage);$('#difficulty-select').value=progress.settings.difficulty;
 renderLoadout();hud();requestAnimationFrame(frame);
 })();

@@ -7,7 +7,7 @@
  'use strict';
  const W=1200,H=560,TAU=Math.PI*2,SCROLL=90;
  const types=Object.freeze({
-  scout:{name:'偵察機',hp:2,r:19,score:100,description:'直進する編隊。橙色の機体はカプセルを運ぶ。'},
+  scout:{name:'偵察機',hp:2,r:19,score:100,description:'直進する編隊。Pマークの機体は青いカプセルを運ぶ。'},
   wave:{name:'波状編隊',hp:2,r:20,score:130,description:'波を描きながら飛ぶ軽戦闘機。'},
   charger:{name:'突撃機',hp:3,r:21,score:200,description:'照準線の予告後、狙った位置へ突進する。'},
   turret:{name:'地上砲台',hp:4,r:19,score:180,description:'地面に固定された狙撃砲台。'},
@@ -57,32 +57,40 @@
   return result;
  }
  function aimedShot(e,env,speed=175,offset=0,r=5){
-  if(e.x<80||e.x>W-50||typeof env.shoot!=='function'||!env.ship)return;
+  if(e.x<80||e.x>W-50||typeof env.shoot!=='function'||!env.ship||e.x<env.ship.x+100)return;
   const angle=Math.atan2(env.ship.y-e.y,env.ship.x-e.x);
   env.shoot(e.x-10,e.y,angle+offset,speed,r);
  }
+ function difficultyOf(value){return value==='easy'?'easy':value==='hard'?'hard':'normal'}
  function update(e,dt,env={}){
   if(!types[e.kind]||!Number.isFinite(dt)||dt<=0)return;
   const stage=stageNumber(env.stage??e.stage),speedBonus=stage*8;
+  const difficulty=difficultyOf(env.difficulty),pressure=clamp(Number.isFinite(env.encounterPressure)?env.encounterPressure:0,0,1);
+  const cooldown=(difficulty==='easy'?1.4:difficulty==='hard'?.8:1)*(1+pressure*.55);
   e.age=(e.age||0)+dt;e.cool=(Number.isFinite(e.cool)?e.cool:2)-dt;
+  e.warning=e.cool<=.3&&e.cool>0&&e.x<W-50&&(!env.ship||e.x>=env.ship.x+100)?(.3-e.cool)/.3:0;
   const previousX=e.x;
   switch(e.kind){
    case 'scout':
     e.x-=(148+speedBonus)*dt;
-    if(e.cool<=0){aimedShot(e,env,175+stage*8);e.cool=3.5-stage*.15}
+    if(e.followLane&&Number.isFinite(e.lane)){
+     const target=laneY(boundsAt(env.bounds,e.x),e.lane,e.r),change=clamp(target-e.y,-70*dt,70*dt);
+     e.y+=change;
+    }
+    if(e.cool<=0){aimedShot(e,env,175+stage*8);e.cool=(3.5-stage*.15)*cooldown}
     break;
    case 'wave':{
     e.x-=(126+speedBonus)*dt;
     const bounds=boundsAt(env.bounds,e.x),base=Number.isFinite(e.lane)?laneY(bounds,e.lane,e.r):e.base;
     e.y=base+Math.sin(e.age*2.5+e.phase)*35;
-    if(e.cool<=0){aimedShot(e,env,165+stage*8);e.cool=3.1-stage*.12}
+    if(e.cool<=0){aimedShot(e,env,165+stage*8);e.cool=(3.1-stage*.12)*cooldown}
     break;
    }
    case 'charger':
     if(e.mode==='approach'){
      e.x-=(140+speedBonus)*dt;
      if(e.x<1080&&env.ship){
-      e.mode='telegraph';e.telegraph=.95;
+      e.mode='telegraph';e.telegraph=(difficulty==='easy'?1.2:difficulty==='hard'?.8:.95)+pressure*.2;
       e.lockX=Math.min(env.ship.x,e.x-100);e.lockY=env.ship.y;
      }
     }else if(e.mode==='telegraph'){
@@ -97,7 +105,7 @@
    case 'ceilingTurret':
     e.x-=SCROLL*dt;
     if(env.ship)e.aim=Math.atan2(env.ship.y-e.y,env.ship.x-e.x);
-    if(e.cool<=0){aimedShot(e,env,190+stage*8);e.cool=2.9-stage*.14}
+    if(e.cool<=0){aimedShot(e,env,190+stage*8);e.cool=(2.9-stage*.14)*cooldown}
     break;
    case 'armored':{
     e.x-=(86+stage*4)*dt;
@@ -105,7 +113,7 @@
     e.y=base+Math.sin(e.age*1.4+e.phase)*14;
     if(e.cool<=0){
      aimedShot(e,env,165+stage*6,-.15);aimedShot(e,env,165+stage*6,.15);
-     e.cool=3.7-stage*.12;
+     e.cool=(3.7-stage*.12)*cooldown;
     }
     break;
    }
@@ -116,25 +124,27 @@
     if(e.launchCool<=0&&e.x>130&&e.x<W-55){
      const side=(e.launchCount||0)%2?1:-1,x=e.x-38,bounds=boundsAt(env.bounds,x),y=clamp(e.y+side*38,bounds.top+24,bounds.bottom-24);
      if(typeof env.spawn==='function')env.spawn(create('scout',x,y,stage,{cool:1.4,drop:(e.launchCount||0)%3===2,phase:(e.launchCount||0)*.7}));
-     e.launchCount=(e.launchCount||0)+1;e.launchCool=2.4-stage*.1;
+     e.launchCount=(e.launchCount||0)+1;e.launchCool=(2.4-stage*.1)*cooldown;
     }
-    if(e.cool<=0){aimedShot(e,env,160+stage*7);e.cool=4}
+    if(e.cool<=0){aimedShot(e,env,160+stage*7);e.cool=4*cooldown}
     break;
    case 'mine':
     e.x-=(82+stage*4)*dt;e.rotation=e.age*1.5;
     e.y=(Number.isFinite(e.lane)?laneY(boundsAt(env.bounds,e.x),e.lane,e.r):e.base)+Math.sin(e.age*1.6+e.phase)*17;
     if(e.cool<=0){
-     if(e.x>100&&e.x<W-70&&typeof env.shoot==='function'){
-      for(let i=0;i<6;i++)env.shoot(e.x,e.y,Math.PI+i*TAU/6,125+stage*6,5);
+     if(e.x>100&&e.x<W-70&&typeof env.shoot==='function'&&(!env.ship||e.x>=env.ship.x+100)){
+      const count=difficulty==='easy'||pressure>=.35?4:difficulty==='hard'?8:6;
+      for(let i=0;i<count;i++)env.shoot(e.x,e.y,Math.PI+i*TAU/count,125+stage*6,5);
      }
-     e.cool=4.4-stage*.12;
+     e.cool=(4.4-stage*.12)*cooldown;
     }
     break;
   }
   const bounds=boundsAt(env.bounds,e.x),radius=e.r||types[e.kind].r;
+  const visualRadius=e.kind==='mine'?Math.max(radius,27):e.kind==='wave'?Math.max(radius,22):e.kind==='charger'&&e.mode==='dive'?Math.max(radius,31):radius;
   if(e.kind==='turret')e.y=bounds.bottom-radius;
   else if(e.kind==='ceilingTurret')e.y=bounds.top+radius;
-  else e.y=clamp(e.y,bounds.top+radius+5,bounds.bottom-radius-5);
+  else e.y=clamp(e.y,bounds.top+visualRadius+5,bounds.bottom-visualRadius-5);
   // Corrupt custom data must never turn a normal formation into a stationary wall.
   if(!Number.isFinite(e.x))e.x=previousX-120*dt;
  }
@@ -187,7 +197,7 @@
     const flipped=e.kind==='ceilingTurret',sy=flipped?-1:1;
     ctx.save();ctx.scale(1,sy);path(ctx,[[-23,19],[-18,6],[18,6],[23,19]],metal,color);ctx.fillStyle=dark;ctx.fillRect(-16,14,32,5);circle(ctx,0,2,13,color);circle(ctx,0,2,6,dark);ctx.restore();
     ctx.save();ctx.rotate(e.aim??Math.PI);ctx.fillStyle=metal;ctx.fillRect(0,-5,26,10);ctx.fillStyle=color;ctx.fillRect(19,-4,8,8);ctx.restore();circle(ctx,0,0,5,bright);
-    if(e.cool<.6){circle(ctx,0,0,8,null,'#ffbd82')}
+    if(e.warning>0){circle(ctx,0,0,8,null,'#ffbd82')}
     break;
    }
    case 'armored':
@@ -207,6 +217,11 @@
     for(let i=0;i<6;i++){ctx.save();ctx.rotate(i*TAU/6);path(ctx,[[12,-4],[27,0],[12,4]],color);ctx.restore()}
     circle(ctx,0,0,7,e.cool<.7?'#ffd8ae':'#ff9b73');circle(ctx,0,0,3,dark);
     break;
+  }
+  if(e.warning>0&&e.kind!=='charger'){
+   ctx.save();ctx.globalAlpha=.55+e.warning*.4;
+   circle(ctx,-Math.min(e.r,22),0,3.5,'#fff4c2');
+   circle(ctx,-Math.min(e.r,22),0,6+e.warning*3,null,'#ffca79');ctx.restore();
   }
   if(e.drop){ctx.fillStyle='#281b12';ctx.font='bold 9px monospace';ctx.fillText('P',e.kind==='carrier'?-15:3,3)}
   ctx.restore();

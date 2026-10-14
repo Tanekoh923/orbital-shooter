@@ -3,14 +3,18 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const OrbitalWorld = require('./world.js');
 const OrbitalEnemies = require('./enemies.js');
+const OrbitalEncounters = require('./encounters.js');
+const OrbitalBosses = require('./bosses.js');
+const OrbitalRecords = require('./records.js');
 const { safeRoute } = require('./world.test.cjs');
 
 // Instrument a test-only copy; production exposes no debug controls.
 const production = readFileSync(__dirname + '/game.js', 'utf8');
 assert.match(production, /\}\)\(\);\s*$/);
 const source = production.replace(/\}\)\(\);\s*$/, `
-this.test={reset,launch,pause,update,hit,bossVolley,equip,shoot,updateShots,terrainY,draw,startStage,damageTarget,
- read:()=>({state,stageIndex,t,score,life,selection,ship,boss,bullets,enemies,shots,caps,particles,loadout,enemyWave,routePhase}),
+this.test={reset,launch,pause,update,hit,equip,shoot,updateShots,terrainY,draw,startStage,damageTarget,optionPosition,enemyBullet,resumeCheckpoint,rules,
+ bossVolley:()=>{boss.age=Math.max(2,boss.age);boss.cool=0;boss.transition=0;bosses.update(boss,.01,{ship,shoot:enemyBullet});},
+ read:()=>({state,stageIndex,t,score,life,selection,ship,boss,bullets,enemies,shots,caps,particles,loadout,enemyWave,routePhase,mission,progress,trail}),
  quiet:()=>{spawn=999;fire=999;shots=[];enemies=[];bullets=[];caps=[];},
  collect:()=>{caps.push({x:ship.x,y:ship.y});update(0);},
  selectUpgrade:i=>{selection=ship.gauge.indexOf(i);},
@@ -18,7 +22,7 @@ this.test={reset,launch,pause,update,hit,bossVolley,equip,shoot,updateShots,terr
  clearShots:()=>{shots=[];},
  target:(x,y,hp=20)=>{const target={x,y,hp,drop:false};enemies.push(target);return target;},
  reachBoss:()=>{t=stages[stageIndex].duration;spawn=999;},
- killBoss:()=>{boss.hp=1;shots=[{x:boss.x,y:boss.y,vx:0,vy:0,damage:2,age:0,hit:new Set()}];},
+ killBoss:()=>{boss.parts.forEach(p=>p.hp=0);boss.hp=1;boss.core.hp=1;boss.core.open=true;boss.age=Math.max(2,boss.age);boss.phase=2;boss.transition=0;boss.damageBudget=10;shots=[{x:boss.core.x,y:boss.core.y,vx:0,vy:0,damage:2,age:0,hit:new Set()}];},
  campaignEquipment:()=>{ship.up=[2,2,2,4,3,2];ship.weapon=2;selection=3;life=2;},
  resumeSpawning:()=>{spawn=0;fire=0;},
  vulnerable:()=>{ship.inv=0;ship.up[4]=0;ship.shieldTime=0;}
@@ -73,7 +77,7 @@ function element() {
   };
 }
 
-function fixture(craft = 'vector', defense = 'guard') {
+function fixture(craft = 'vector', defense = 'guard', options = {}) {
   const elements = new Map();
   const slots = Array.from({ length: 6 }, (_, i) => Object.assign(element(), { dataset: { gaugeSlot: String(i) } }));
   const docListeners = new Map(), winListeners = new Map();
@@ -88,11 +92,20 @@ function fixture(craft = 'vector', defense = 'guard') {
     documentElement: { style: { setProperty() {} } },
   };
   document.querySelector('#upgrades').children = Array.from({ length: 6 }, element);
+  document.querySelector('#mode-select').value = 'campaign';
+  document.querySelector('#difficulty-select').value = 'normal';
+  document.querySelector('#practice-stage').value = '0';
+  document.querySelector('#practice-stage').options = Array.from({ length: 5 }, (_, i) => Object.assign(element(), { value: String(i) }));
+  const storageMap = options.storageMap || new Map(Object.entries(options.storageData || {}));
+  const localStorage = {
+    getItem(key) { if (options.storageThrows) throw Error('storage denied'); return storageMap.get(key) ?? null; },
+    setItem(key, value) { if (options.storageThrows) throw Error('storage denied'); storageMap.set(key, String(value)); },
+  };
   const context = vm.createContext({
     document,
-    window: { addEventListener(type, fn) { winListeners.set(type, fn); } },
-    localStorage: { getItem() { return '0'; }, setItem() {} },
-    requestAnimationFrame() {}, Math, console, OrbitalWorld, OrbitalEnemies,
+    window: { addEventListener(type, fn) { winListeners.set(type, fn); }, matchMedia() { return { matches: !!options.touch }; } },
+    localStorage,
+    requestAnimationFrame() {}, Math, console, OrbitalWorld, OrbitalEnemies, OrbitalEncounters, OrbitalBosses, OrbitalRecords,
   });
   vm.runInContext(source, context);
   const g = context.test;
@@ -100,11 +113,12 @@ function fixture(craft = 'vector', defense = 'guard') {
     const el = typeof selector === 'number' ? slots[selector] : elements.get(selector);
     el.value = String(value); el.dispatch('change');
   }
-  change('#craft-select', craft); change('#defense-select', defense);
+  if (craft !== null) change('#craft-select', craft);
+  if (defense !== null) change('#defense-select', defense);
   function start() { elements.get('#start').onclick(); g.quiet(); }
   function equip(id) { g.selectUpgrade(id); g.equip(); }
   function fire() { g.clearShots(); g.shoot(g.read().ship.x, g.read().ship.y); return g.read().shots; }
-  return { g, elements, slots, change, start, equip, fire, document, docListeners, winListeners };
+  return { g, elements, slots, change, start, equip, fire, document, docListeners, winListeners, storageMap };
 }
 
 function test(name, run) { run(); console.log('PASS: ' + name); }
@@ -267,7 +281,7 @@ test('five-stage campaign preserves build, clears hazards, recovers hull and unl
     assert.equal(g.read().stageIndex, i); assert.equal(g.read().state, 'playing');
     assert.equal(elements.get('#loadout-fieldset').disabled, true);
     g.pause(); const pausedTime = g.read().t; g.update(1); assert.equal(g.read().t, pausedTime); g.pause();
-    g.reachBoss(); g.update(0); assert.ok(g.read().boss); assert.equal(g.read().boss.max, [230, 280, 330, 380, 460][i]);
+    g.reachBoss(); g.update(0); assert.ok(g.read().boss); assert.equal(g.read().boss.max, [170, 195, 225, 250, 285][i]);
     g.bossVolley(); assert.ok(g.read().bullets.length > 0);
     assert.ok(g.read().bullets.every(b => Number.isFinite(b.vx) && Number.isFinite(b.vy)));
     g.killBoss(); g.update(0); assert.equal(g.read().state, i === 4 ? 'won' : 'stageclear');
@@ -484,6 +498,135 @@ test('a player laser inside the ceiling cannot damage an enemy through terrain',
   const laser = fire()[0]; laser.y = OrbitalWorld.bounds(0, laser.x, 0).top - 1;
   const target = g.target(laser.x, laser.y); g.updateShots(0);
   assert.equal(laser.dead, true); assert.equal(target.hp, 20);
+});
+
+function loseMission(f) {
+  const limit = f.g.read().life;
+  for (let i = 0; i < limit; i++) { f.g.vulnerable(); f.g.hit(); }
+  assert.equal(f.g.read().state, 'over');
+}
+
+test('fresh practice rejects locked stages and offers the first boss immediately', () => {
+  const f = fixture(), { g, elements } = f;
+  f.change('#mode-select', 'boss'); f.change('#practice-stage', 4);
+  assert.equal(elements.get('#practice-stage').value, '0');
+  assert.equal(elements.get('#practice-stage').options[0].disabled, false);
+  assert.ok(elements.get('#practice-stage').options.slice(1).every(option => option.disabled));
+  f.start(); assert.equal(g.read().stageIndex, 0); assert.equal(g.read().mission.mode, 'boss');
+  assert.equal(g.read().mission.ranked, false); assert.ok(g.read().boss); assert.equal(g.read().t, 65);
+  assert.deepEqual(plain(g.read().ship.up), [1, 1, 2, 2, 3, 1]);
+  assert.match(elements.get('#sector').textContent, /PRACTICE.*NORMAL/);
+  g.killBoss(); g.update(0); assert.equal(g.read().state, 'won');
+  assert.equal(elements.get('#title').textContent, 'PRACTICE CLEAR');
+  assert.equal(g.read().progress.unlockedStage, 0); assert.equal(g.read().progress.records.normal, 0);
+});
+
+test('campaign unlocks persist and practice scores never replace ranked records', () => {
+  const f = fixture(), { g } = f; f.start(); g.reachBoss(); g.update(0); g.killBoss(); g.update(0);
+  assert.equal(g.read().state, 'stageclear'); assert.equal(g.read().progress.unlockedStage, 1);
+  assert.equal(g.read().progress.unlockedBoss, 1, 'newly unlocked stage and boss practice must agree immediately');
+  g.launch(); g.quiet(); g.collect(); loseMission(f);
+  assert.equal(g.read().progress.unlockedBoss, 1, 'losing before reaching the next boss must preserve its practice unlock');
+  const record = g.read().score; assert.equal(g.read().progress.records.normal, record); assert.equal(record, 5050);
+  f.change('#mode-select', 'stage'); f.change('#practice-stage', 1); f.start();
+  assert.equal(g.read().stageIndex, 1); assert.equal(g.read().mission.mode, 'stage');
+  g.collect(); g.reachBoss(); g.update(0); g.killBoss(); g.update(0);
+  assert.equal(g.read().state, 'won'); assert.equal(g.read().progress.records.normal, record);
+  assert.equal(g.read().progress.unlockedStage, 1); assert.equal(g.read().progress.checkpoint.stage, 1);
+  const restored = fixture(null, null, { storageMap: f.storageMap });
+  assert.equal(restored.g.read().progress.unlockedStage, 1); assert.equal(restored.g.read().progress.records.normal, record);
+  assert.equal(restored.g.read().progress.unlockedBoss, 1, 'a reload cannot alter available boss practice');
+  assert.equal(restored.elements.get('#mode-select').value, 'stage');
+});
+
+test('retry restores stage-entry score and equipment while marking the run as a continuation', () => {
+  const f = fixture('prism', 'core'), { g, elements } = f; f.start(); g.campaignEquipment();
+  g.reachBoss(); g.update(0); g.killBoss(); g.update(0); g.launch(); g.quiet();
+  const entry = plain(g.read().progress.checkpoint); assert.equal(entry.stage, 1); assert.equal(entry.score, 5000);
+  g.collect(); g.read().ship.up[3] = 0; g.read().ship.weapon = 5; loseMission(f);
+  assert.equal(elements.get('#retry').classList.contains('hidden'), false);
+  elements.get('#retry').dispatch('click'); g.quiet();
+  assert.equal(g.read().state, 'playing'); assert.equal(g.read().stageIndex, 1); assert.equal(g.read().t, 0);
+  assert.equal(g.read().score, entry.score); assert.equal(g.read().selection, entry.selection);
+  for (const field of ['craft', 'defense', 'gauge', 'up', 'weapon', 'shieldTime']) assert.deepEqual(plain(g.read().ship[field]), entry.ship[field]);
+  assert.equal(g.read().life, 3); assert.equal(g.read().mission.ranked, false);
+  assert.match(elements.get('#sector').textContent, /CONTINUE.*NORMAL/);
+  const best = g.read().progress.records.normal; g.collect(); loseMission(f);
+  assert.equal(g.read().progress.records.normal, best); assert.match(elements.get('#overline').textContent, /参考スコア/);
+});
+
+test('reload can resume saved equipment unranked; a fresh launch restores a ranked clean campaign', () => {
+  const f = fixture('tempest', 'limit'); f.start(); f.g.campaignEquipment();
+  f.g.read().ship.up[4] = 1; f.g.read().ship.shieldTime = 2.2;
+  f.g.reachBoss(); f.g.update(0); f.g.killBoss(); f.g.update(0); f.g.launch();
+  const entry = plain(f.g.read().progress.checkpoint), restored = fixture(null, null, { storageMap: f.storageMap });
+  assert.equal(restored.elements.get('#continue').classList.contains('hidden'), false);
+  restored.elements.get('#continue').dispatch('click'); restored.g.quiet();
+  assert.equal(restored.g.read().mission.ranked, false); assert.equal(restored.g.read().stageIndex, entry.stage);
+  assert.equal(restored.g.read().score, entry.score); assert.deepEqual(plain(restored.g.read().ship.up), entry.ship.up);
+  assert.equal(restored.g.read().ship.shieldTime, 2.2); assert.match(restored.elements.get('#sector').textContent, /CONTINUE/);
+  loseMission(restored); restored.start();
+  assert.equal(restored.g.read().stageIndex, 0); assert.equal(restored.g.read().score, 0);
+  assert.equal(restored.g.read().mission.ranked, true); assert.deepEqual(plain(restored.g.read().ship.up), [0, 0, 0, 0, 0, 0]);
+  assert.equal(restored.g.read().ship.weapon, null); assert.equal(restored.g.read().ship.shieldTime, 0);
+});
+
+test('storage denial still permits launch, practice and a reversible stage retry', () => {
+  const f = fixture('vector', 'guard', { storageThrows: true }); f.start(); f.g.collect(); loseMission(f);
+  assert.equal(f.g.read().progress.records.normal, 50); assert.equal(f.elements.get('#retry').classList.contains('hidden'), false);
+  f.elements.get('#retry').dispatch('click'); assert.equal(f.g.read().state, 'playing');
+  assert.equal(f.g.read().mission.ranked, false); assert.equal(f.g.read().score, 0);
+});
+
+test('difficulty scales hull, bullets and collection while retaining consistent hit radii', () => {
+  for (const difficulty of ['easy', 'normal', 'hard']) {
+    const setup = () => { const f = fixture(); f.change('#difficulty-select', difficulty); f.start(); return f; };
+    const f = setup(), { g } = f, hull = difficulty === 'easy' ? 4 : 3;
+    assert.equal(g.read().life, hull); assert.equal(g.rules().hitRadius, difficulty === 'easy' ? 12 : 15);
+    g.enemyBullet(500, 280, Math.PI, 200, 6);
+    assert.ok(Math.abs(Math.hypot(g.read().bullets[0].vx, g.read().bullets[0].vy) - { easy: 156, normal: 200, hard: 234 }[difficulty]) < 1e-9);
+    assert.equal(g.read().bullets[0].r, 6);
+    g.quiet(); g.vulnerable(); g.enemyBullet(g.read().ship.x + 19, g.read().ship.y, 0, 0, 6); g.update(0);
+    assert.equal(g.read().life, difficulty === 'easy' ? hull : hull - 1);
+    const enemyCase = setup(); enemyCase.g.vulnerable();
+    enemyCase.g.read().enemies.push(OrbitalEnemies.create('wave', enemyCase.g.read().ship.x + 34, enemyCase.g.read().ship.y, 0, { cool: 999, base: 280, phase: 0 }));
+    enemyCase.g.update(0); assert.equal(enemyCase.g.read().life, difficulty === 'easy' ? hull : hull - 1);
+    const capsuleCase = setup(); capsuleCase.g.read().caps.push({ x: capsuleCase.g.read().ship.x + 36, y: capsuleCase.g.read().ship.y }); capsuleCase.g.update(0);
+    assert.equal(capsuleCase.g.read().score, difficulty === 'easy' ? 50 : 0);
+    const terrainCase = setup(); terrainCase.g.vulnerable();
+    const x = Array.from({ length: 180 }, (_, i) => 100 + i * 5).find(x => {
+      const y = OrbitalWorld.bounds(0, x, 0).bottom - 14;
+      return !OrbitalWorld.collides(0, x, y, 12, 0, false).hit && OrbitalWorld.collides(0, x, y, 15, 0, false).hit;
+    });
+    assert.notEqual(x, undefined); terrainCase.g.read().ship.x = x; terrainCase.g.read().ship.y = OrbitalWorld.bounds(0, x, 0).bottom - 14;
+    terrainCase.g.update(0); assert.equal(terrainCase.g.read().life, difficulty === 'easy' ? hull : hull - 1);
+  }
+});
+
+test('option trails follow elapsed time at 30 and 60 FPS and freeze on pause', () => {
+  const results = [];
+  for (const fps of [30, 60]) {
+    const f = fixture(); f.start(); for (let i = 0; i < 4; i++) f.equip(3);
+    f.winListeners.get('keydown')({ code: 'KeyD' });
+    for (let frame = 0; frame < 2 * fps; frame++) f.g.update(1 / fps);
+    f.winListeners.get('keyup')({ code: 'KeyD' });
+    assert.ok(f.g.read().trail.length <= fps * 1.2 + 2); assert.ok(f.g.read().trail.every(point => Number.isFinite(point.time)));
+    results.push(Array.from({ length: 4 }, (_, i) => f.g.optionPosition(i)));
+    f.g.pause(); const before = plain(f.g.read()); f.g.update(10); f.g.draw(10, 10); assert.deepEqual(plain(f.g.read()), before);
+  }
+  for (let option = 0; option < 4; option++) {
+    assert.ok(Math.abs(results[0][option].x - results[1][option].x) <= 9);
+    assert.ok(Math.abs(results[0][option].y - results[1][option].y) < 1e-9);
+  }
+});
+
+test('mobile equipment notices, practice labels and boss timers stay readable and pause safely', () => {
+  const f = fixture(), { g, elements } = f; f.change('#mode-select', 'boss'); f.change('#difficulty-select', 'easy'); f.start();
+  g.collect(); assert.match(elements.get('#notice').textContent, /装備ボタン/); assert.doesNotMatch(elements.get('#notice').textContent, /PRESS X/);
+  assert.match(elements.get('#sector').textContent, /PRACTICE.*EASY/);
+  g.update(.02); assert.match(elements.get('#boss-status').textContent, /第1形態/);
+  g.pause(); const before = plain(g.read()); g.update(20); g.draw(20, 20);
+  assert.deepEqual(plain(g.read()), before); assert.equal(g.read().boss.age, before.boss.age);
 });
 
 test('headless full-length campaign follows a safe route without invalid or runaway entities', () => {

@@ -1,14 +1,25 @@
 <!doctype html>
 <html lang="ja">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#091217"><title>ORBITAL / 星間迎撃作戦</title><link rel="stylesheet" href="style.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#091217"><title>ORBITAL / 星間迎撃作戦</title><link rel="stylesheet" href="style.css?v=20261014b"></head>
 <body>
 <main>
  <header><a class="brand" href="./">O<span>⊕</span> / ORBITAL</a><div class="edition">ARCADE SYSTEM <b>01</b></div><button id="sound">SOUND OFF</button></header>
  <section class="intro"><div><p class="eyebrow">SIDE-SCROLLING SPACE SHOOTER</p><h1>星の向こうへ、<br><em>撃ち抜け。</em></h1></div><p class="description">敵編隊を突破し、母艦を撃破せよ。<br>カプセルを集め、自分だけの機体へ。<span>5 STAGES / THE ORBITAL CAMPAIGN</span></p></section>
  <details class="loadout">
-  <summary><span class="loadout-heading"><span class="loadout-index">01 / PREFLIGHT</span><strong>出撃設定</strong></span><span id="loadout-summary" aria-live="polite">VECTOR / GUARD</span><span class="loadout-toggle">機体・防御・ゲージ順 <span aria-hidden="true">＋</span></span></summary>
+  <summary><span class="loadout-heading"><span class="loadout-index">01 / PREFLIGHT</span><strong>出撃設定</strong></span><span id="loadout-summary" aria-live="polite">VECTOR / GUARD</span><span class="loadout-toggle">任務・難易度・装備 <span aria-hidden="true">＋</span></span></summary>
   <fieldset id="loadout-fieldset">
-   <legend class="visually-hidden">機体とパワーアップを設定</legend>
+   <legend class="visually-hidden">任務と難易度、機体とパワーアップを設定</legend>
+   <div class="mission-controls" role="group" aria-labelledby="mission-label" aria-describedby="mission-help">
+    <div class="mission-heading"><strong id="mission-label">任務と難易度</strong><span>MISSION PROFILE</span></div>
+    <div class="mission-selects">
+     <label class="config-field" for="mode-select"><span>任務 <small>MODE</small></span><select id="mode-select"><option value="campaign" selected>全5ステージ</option><option value="stage">ステージ練習</option><option value="boss">ボス練習</option></select></label>
+     <label class="config-field" for="practice-stage"><span>練習するステージ <small>SECTOR</small></span><select id="practice-stage" disabled><option value="0">01 / 蒼の宙域</option><option value="1">02 / 灼熱の小惑星帯</option><option value="2">03 / 氷の星雲</option><option value="3">04 / 翠の廃墟</option><option value="4">05 / 最終防衛線</option></select></label>
+     <label class="config-field" for="difficulty-select"><span>難易度 <small>DIFFICULTY</small></span><select id="difficulty-select"><option value="easy">EASY</option><option value="normal" selected>NORMAL</option><option value="hard">HARD</option></select></label>
+    </div>
+    <p id="mission-help" aria-live="polite">全5ステージに挑戦。クリアしたステージは練習できるようになります。</p>
+    <p id="records" aria-live="polite">NORMAL / 記録未登録</p>
+    <button id="continue" class="hidden" type="button">保存したステージから再開</button>
+   </div>
    <div class="loadout-selects">
     <label class="config-field" for="craft-select"><span>機体 <small>INTERCEPTOR</small></span><select id="craft-select" aria-describedby="craft-detail"><option value="vector">VECTOR</option><option value="tempest">TEMPEST</option><option value="lancer">LANCER</option><option value="prism">PRISM</option></select></label>
     <label class="config-field" for="defense-select"><span>防御装備 <small>DEFENSE SYSTEM</small></span><select id="defense-select"><option value="guard">GUARD / 上下3発＋地形接触を防ぐ</option><option value="front">SHIELD / 前方12発</option><option value="limit">LIMIT / 3秒間無敵</option><option value="core">FORCE FIELD / 全方位3発</option></select></label>
@@ -25,13 +36,13 @@
    </div>
    <p class="loadout-lock">設定は出撃前に変更できます。作戦中・ステージ間は固定されます。</p>
   </fieldset>
-  <div class="loadout-notes"><p><b>赤いカプセル</b>で選択を進め、<kbd>X</kbd> で装備。MISSILE・DOUBLE・LASER は同じ装備を2回取得すると Lv.2 に強化。DOUBLE と LASER は強化段階を保ったまま切り替え、OPTION は最大4機です。</p><p>グラディウス外伝の仕組みを参考に、独自の機体・武器でアレンジしています。</p></div>
+  <div class="loadout-notes"><p><b>青いカプセル</b>で選択を進め、装備ボタン（PCは <kbd>X</kbd>）で装備。MISSILE・DOUBLE・LASER は同じ装備を2回取得すると Lv.2 に強化。DOUBLE と LASER は強化段階を保ったまま切り替え、OPTION は最大4機です。</p><p>グラディウス外伝の仕組みを参考に、独自の機体・武器でアレンジしています。</p></div>
  </details>
  <section class="cabinet" aria-label="シューティングゲーム">
   <div class="play-tools"><p class="mobile-hint">横向き推奨 <span>／ 自動射撃 ON</span></p><button id="focus-mode" type="button" aria-pressed="false">プレイ画面を広げる <span aria-hidden="true">⛶</span></button></div>
   <div class="hud"><div><small>SCORE</small><strong id="score">000000</strong></div><div><small>BEST</small><strong id="best">000000</strong></div><div class="sector"><small id="sector">STAGE 1 / 5</small><span id="progress">BLUE FRONTIER</span></div><div><small>HULL</small><strong id="lives">◆ ◆ ◆</strong></div></div>
-  <div class="screen"><canvas id="game" width="1200" height="560" aria-label="横スクロール宇宙シューティング"></canvas><div class="scanlines"></div><div id="overlay"><p id="overline">INTERCEPTOR / O-01</p><h2 id="title">ORBITAL</h2><p id="message">5つの宙域を突破せよ。出撃準備はいいか。</p><button id="start">出撃する <span>↗</span></button><small>ENTER TO LAUNCH</small></div><button id="pause" aria-label="一時停止">Ⅱ</button><div id="notice"></div></div>
-  <div class="power"><div class="power-label">POWER UP <small>赤いカプセル → Xで装備</small></div><div id="upgrades" aria-label="パワーアップゲージ"><span>SPEED</span><span>MISSILE</span><span>DOUBLE</span><span>LASER</span><span>OPTION</span><span>SHIELD</span></div><button id="equip">装備 <kbd>X</kbd></button></div>
+  <div class="screen"><canvas id="game" width="1200" height="560" aria-label="横スクロール宇宙シューティング"></canvas><div class="scanlines"></div><div id="boss-status" aria-live="polite"></div><div id="overlay"><p id="overline">INTERCEPTOR / O-01</p><h2 id="title">ORBITAL</h2><p id="message">5つの宙域を突破せよ。出撃準備はいいか。</p><button id="start">出撃する <span>↗</span></button><button id="retry" class="hidden" type="button">このステージから再開</button><small>ENTER TO LAUNCH</small></div><button id="pause" aria-label="一時停止">Ⅱ</button><div id="notice"></div></div>
+  <div class="power"><div class="power-label">POWER UP <small><span class="keyboard-instruction">青いカプセル → Xで装備</span><span class="touch-instruction">青いカプセル → 装備をタップ</span></small></div><div id="upgrades" aria-label="パワーアップゲージ"><span>SPEED</span><span>MISSILE</span><span>DOUBLE</span><span>LASER</span><span>OPTION</span><span>SHIELD</span></div><button id="equip">装備 <kbd>X</kbd></button></div>
   <div class="armament-status"><span id="route-status">蒼の宙域 / 開けた航路</span><span id="defense-status" aria-live="polite">GUARD / 未装備</span></div>
  </section>
  <div class="below"><div><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> / WASD <span>移動</span><kbd>SPACE</kbd> <span>ショット</span><kbd>X</kbd> <span>強化</span><kbd>P</kbd> <span>一時停止</span></div><label><input id="auto" type="checkbox" checked> AUTO FIRE</label></div>
@@ -41,4 +52,4 @@
   <div class="touch-actions"><button id="touchpause" type="button" aria-label="一時停止">Ⅱ <span>一時停止</span></button><button id="touchfire" type="button">FIRE <span>ショット</span></button><button id="touchpower" type="button">POWER UP <span>装備</span></button></div>
  </div>
  <footer><span>ONE SHIP. AN ENTIRE FRONTIER.</span><span>オリジナル・アーケードシューティング / 2026</span></footer>
-</main><script src="world.js?v=20261014"></script><script src="enemies.js?v=20261014"></script><script src="game.js?v=20261014"></script></body></html>
+</main><script src="world.js?v=20261014b"></script><script src="enemies.js?v=20261014b"></script><script src="encounters.js?v=20261014b"></script><script src="bosses.js?v=20261014b"></script><script src="records.js?v=20261014b"></script><script src="game.js?v=20261014b"></script></body></html>
