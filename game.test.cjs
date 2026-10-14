@@ -503,7 +503,7 @@ test('headless full-length campaign follows a safe route without invalid or runa
       if (before.boss) before.boss.hp = 1e6;
       assert.equal(OrbitalWorld.collides(stage, 170, y, 15, nextTime, false).hit, false);
       g.update(1 / 60);
-      // Physics runs at60Hz; a20Hz no-op canvas still exercises every render path and particle cleanup.
+      // Physics runs at 60 Hz; a 20 Hz no-op canvas exercises render paths and particle cleanup.
       if (frame % 3 === 2) g.draw(3 / 60, nextTime);
       const current = g.read();
       assert.equal(current.state, 'playing'); assert.ok(Number.isFinite(current.ship.x) && Number.isFinite(current.ship.y));
